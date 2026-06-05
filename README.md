@@ -37,7 +37,7 @@ mkdir sim-project && cd sim-project
 uv init --bare
 
 # add pow cli package
-uv add "pow-cli==0.1.0rc1"
+uv add pow-cli
 
 # Initialize project, install isaac sim, setup ROS, create config file
 uv run pow init

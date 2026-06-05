@@ -2,6 +2,20 @@
 
 All notable changes to the `pow-cli` package will be documented in this file.
 
+## [0.1.0] - 2026-06-05
+
+First stable release of `pow-cli`, promoted from `0.1.0-rc.1` with documentation improvements.
+
+### Fixed
+
+- Installation guide referenced incorrect `pow-cli` version
+
+### Changed
+
+- Improved README wording, tagline, and Profiles section
+
+---
+
 ## [0.1.0-rc.1] - 2026-05-11
 
 ### Added
