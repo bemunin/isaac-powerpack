@@ -2,6 +2,25 @@
 
 All notable changes to the `pow-cli` package will be documented in this file.
 
+## [0.2.0-rc.1] - 2026-06-14
+
+### Added
+
+- **Custom ROS Dockerfile (`pow init`)**
+  - New `ros_dockerfile` config in `pow.toml` — point to a project-local Dockerfile that layers on top of the bundled `pow_simros_<distro>` base image
+  - New `ros_container_name` config in `pow.toml` — set a custom container/image name (defaults to `pow_simros`)
+  - `pow init` now builds the custom image automatically after the base image when `ros_dockerfile` is set
+  - `pow ros` launches the custom image when configured, otherwise falls back to the base image
+- **Version flag (`pow --version` / `pow -v`)** — quickly check the installed `pow-cli` version from the command line
+
+### Changed
+
+- Updated CLI description to *"Manage Isaac Sim projects and simplify the development workflow"*
+- Renamed status messages from *"Isaac ROS workspace"* to *"Isaac Sim ROS workspace"* for clarity
+- Container name is now read from `ros_container_name` config instead of being hard-coded
+
+---
+
 ## [0.1.1] - 2026-06-14
 
 ### Fixed
