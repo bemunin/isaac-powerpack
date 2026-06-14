@@ -356,6 +356,31 @@ def _step6_ros_integration(
     else:
         console.print(f"   [green]✔[/green] Docker image {simros_label} built successfully.")
 
+    # Build custom ROS image layered on top of pow_simros_<distro>
+    custom_dockerfile = ros_mgr.config.ros_dockerfile
+    if custom_dockerfile:
+        custom_image = ros_mgr.config.ros_container_name
+
+        def custom_status_callback(state):
+            if state == "custom_building":
+                custom_status.update(f"[bold green]Building custom image '{custom_image}'...")
+            elif state.startswith("custom_building:"):
+                line = state[len("custom_building:"):]
+                custom_status.update(f"[bold green]custom build:[/bold green] [dim]{line[:80]}[/dim]")
+
+        with console.status(f"Building custom image '{custom_image}'...") as custom_status:
+            try:
+                ros_mgr.build_custom_ros_image(status_callback=custom_status_callback)
+            except Exception as e:
+                console.print(f"   [bold red]❌ Custom ROS Build Error:[/bold red] {e}")
+                console.print("   [yellow]⊖[/yellow] Skipping remaining steps due to build error.")
+                raise SystemExit(1)
+
+        console.print(
+            f"   [green]✔[/green] Custom Docker image [bold]{custom_image}[/bold] "
+            f"built from [dim]{custom_dockerfile}[/dim]."
+        )
+
     return True, display_path
 
 

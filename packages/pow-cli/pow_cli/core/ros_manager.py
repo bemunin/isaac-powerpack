@@ -285,6 +285,71 @@ class RosManager:
 
         return {"status": "built", "image": docker_image}
 
+    def build_custom_ros_image(self, status_callback=None) -> dict:
+        """Build a custom ROS image layered on top of ``pow_simros_<distro>``.
+
+        Builds the Dockerfile referenced by ``ros_dockerfile`` in pow.toml,
+        tagging the result with ``ros_container_name``.  The custom Dockerfile is
+        expected to start with ``FROM pow_simros_<distro>`` so it inherits the
+        base image's WORKDIR and entrypoint.
+
+        Returns ``{"status": "skipped"}`` when ``ros_dockerfile`` is empty.
+        The build always runs (Docker layer caching keeps unchanged builds fast)
+        so edits to the custom Dockerfile take effect on re-init.
+        """
+        ros_dockerfile = self.config.ros_dockerfile
+        if not ros_dockerfile:
+            return {"status": "skipped"}
+
+        project_root = self.config.project_root
+        if project_root is None:
+            raise RuntimeError("Not initialized: pow.toml not found.")
+
+        dockerfile_path = project_root / ros_dockerfile
+        if not dockerfile_path.exists():
+            raise RuntimeError(
+                f"Custom ROS Dockerfile not found: {dockerfile_path}\n"
+                f"Check the 'ros_dockerfile' path in pow.toml."
+            )
+
+        image = self.config.ros_container_name
+
+        if status_callback:
+            status_callback("custom_building")
+
+        build_cmd = [
+            "docker", "build",
+            "-f", str(dockerfile_path),
+            "-t", image,
+            str(project_root),
+        ]
+
+        process = subprocess.Popen(
+            build_cmd,
+            cwd=str(project_root),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        output_lines: list[str] = []
+        for line in process.stdout:
+            stripped = line.strip()
+            if stripped:
+                output_lines.append(stripped)
+                if status_callback:
+                    status_callback(f"custom_building:{stripped}")
+        process.wait()
+
+        if process.returncode != 0:
+            tail = "\n".join(output_lines[-30:])
+            raise RuntimeError(
+                f"Docker build for custom image '{image}' failed with exit code "
+                f"{process.returncode}\n"
+                f"--- Last lines of build output ---\n{tail}"
+            )
+
+        return {"status": "built", "image": image}
+
     # ── Container launching (from Runner) ────────────────────────────────────
 
     @staticmethod
@@ -301,7 +366,7 @@ class RosManager:
                 "Set 'enable_ros = true' under [sim] and re-run 'pow init' to enable it."
             )
 
-        docker_image = f"pow_simros_{config.ros_distro}"
+        docker_image = config.ros_image_name
 
         image_check = subprocess.run(
             ["docker", "image", "inspect", f"{docker_image}:latest"],
@@ -375,6 +440,7 @@ class RosManager:
         ros_distro = config.ros_distro
         ros_ws_path = config.ros_ws_path
         distro_ws = ros_ws_path / f"{ros_distro}_ws"
+        container_name = config.ros_container_name
 
         uid = os.getuid()
         gid = os.getgid()
@@ -400,13 +466,13 @@ class RosManager:
             if scripts_dir.exists():
                 cmd.extend(["-v", f"{scripts_dir}:/home/hostuser/scripts"])
 
-        cmd.extend(["--name", "pow_simros", docker_image])
+        cmd.extend(["--name", container_name, docker_image])
         cmd.extend(extra_args or ["/bin/bash"])
 
         # Remove any stale stopped/exited container with the same name
         # to prevent "name already in use" conflicts.
         subprocess.run(
-            ["docker", "rm", "-f", "pow_simros"],
+            ["docker", "rm", "-f", container_name],
             capture_output=True,
         )
 
@@ -440,7 +506,7 @@ class RosManager:
 
         RosManager._unlock_x11(verbose=verbose)
 
-        container_name = "pow_simros"
+        container_name = config.ros_container_name
 
         if RosManager._is_container_running(container_name):
             RosManager._attach_to_container(container_name, docker_image, extra_args, verbose=verbose)

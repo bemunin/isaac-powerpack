@@ -76,7 +76,7 @@ pow python -p perf my_script.py
 
 ## `pow ros`
 
-Launch the `pow_simros` Docker container for ROS development. Requires ROS integration to be enabled during `pow init`. See more about ROS 2 enable flag in [Configuration Guide](docs/configuration.md).
+Launch the ROS Docker container for ROS development. Requires ROS integration to be enabled during `pow init`. By default this runs the bundled `pow_simros_<distro>` image in a container named `pow_simros`; when `ros_dockerfile` / `ros_container_name` are set in `pow.toml`, it runs your custom image in a container named `ros_container_name`. See more about the ROS 2 enable flag and custom images in the [Configuration Guide](docs/configuration.md).
 
 ```bash
 # Start an interactive ROS bash session

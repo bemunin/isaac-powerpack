@@ -300,3 +300,50 @@ extends = "a"
 
     with pytest.raises(_click.ClickException, match="[Cc]ircular"):
         config.get_profile("a")
+
+
+# ── custom ROS image config tests ───────────────────────────────────────────────
+
+def test_ros_defaults(tmp_path, monkeypatch, reset_config_singleton):
+    """ros_dockerfile/ros_container_name fall back to defaults when unset."""
+    root = tmp_path / "project"
+    root.mkdir()
+    (root / "pow.toml").write_text("[sim]\nenable_ros = true\n")
+    monkeypatch.chdir(root)
+    config = PowConfig()
+
+    assert config.ros_dockerfile == ""
+    assert config.ros_container_name == "pow_simros"
+    # No custom dockerfile → base image name
+    assert config.ros_image_name == f"pow_simros_{config.ros_distro}"
+
+
+def test_ros_custom_values(tmp_path, monkeypatch, reset_config_singleton):
+    """ros_dockerfile/ros_container_name are read from [sim]."""
+    content = """
+[sim]
+enable_ros = true
+ros_dockerfile = "docker/Dockerfile.simros"
+ros_container_name = "my_robot_sim"
+"""
+    root = tmp_path / "project"
+    root.mkdir()
+    (root / "pow.toml").write_text(content)
+    monkeypatch.chdir(root)
+    config = PowConfig()
+
+    assert config.ros_dockerfile == "docker/Dockerfile.simros"
+    assert config.ros_container_name == "my_robot_sim"
+    # Custom dockerfile set → image name is the container name
+    assert config.ros_image_name == "my_robot_sim"
+
+
+def test_ros_defaults_without_pow_toml(tmp_path, monkeypatch, reset_config_singleton):
+    """ROS properties return defaults (no RuntimeError) when pow.toml is absent."""
+    empty_dir = tmp_path / "empty"
+    empty_dir.mkdir()
+    monkeypatch.chdir(empty_dir)
+    config = PowConfig()
+
+    assert config.ros_dockerfile == ""
+    assert config.ros_container_name == "pow_simros"

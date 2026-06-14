@@ -136,6 +136,43 @@ class PowConfig:
         return Path(raw).expanduser()
 
     @property
+    def ros_dockerfile(self) -> str:
+        """Relative path to a custom ROS Dockerfile, or "" if unset.
+
+        Reads ``ros_dockerfile`` from pow.toml ``[sim]``.  When set, the custom
+        Dockerfile is built on top of the bundled ``pow_simros_<distro>`` base
+        image during ``pow init``.  Falls back to an empty string when the key
+        is missing or pow.toml is not loaded.
+        """
+        try:
+            return self.get("ros_dockerfile", "") or ""
+        except RuntimeError:
+            return ""
+
+    @property
+    def ros_container_name(self) -> str:
+        """Name for the ROS container (and custom image tag).
+
+        Reads ``ros_container_name`` from pow.toml ``[sim]``.  Defaults to
+        ``"pow_simros"`` when the key is missing or pow.toml is not loaded.
+        """
+        try:
+            return self.get("ros_container_name", "pow_simros") or "pow_simros"
+        except RuntimeError:
+            return "pow_simros"
+
+    @property
+    def ros_image_name(self) -> str:
+        """Image to run with ``pow ros``.
+
+        Returns the custom ``ros_container_name`` tag when ``ros_dockerfile`` is
+        set, otherwise the bundled ``pow_simros_<distro>`` base image.
+        """
+        if self.ros_dockerfile:
+            return self.ros_container_name
+        return f"pow_simros_{self.ros_distro}"
+
+    @property
     def ros_distro(self) -> str:
         """Get the ROS distribution for the current OS version."""
         return self.ROS_DISTRO_MAP.get(self.ubuntu_version, "humble")

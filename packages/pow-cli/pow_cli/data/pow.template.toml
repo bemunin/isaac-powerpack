@@ -5,6 +5,12 @@ cpu_performance_mode = false
 headless = false
 enable_ros = false
 isaacsim_ros_ws = "~/IsaacSim-ros_workspaces"
+# Optional: path to a custom ROS Dockerfile (relative to project root).
+# It must start with `FROM pow_simros_humble` or `FROM pow_simros_jazzy`.
+# Leave empty to use the bundled base image only.
+ros_dockerfile = ""
+# Name for the ROS container (and the custom image tag when ros_dockerfile is set).
+ros_container_name = "pow_simros"
 # list your default enable extensions
 exts = ["isaacsim.code_editor.vscode"]
 # Disable raytracingMotion by default to improve performance on lower-end hardware.

@@ -89,6 +89,8 @@ cpu_performance_mode = false
 headless = false
 enable_ros = false
 isaacsim_ros_ws = "~/IsaacSim-ros_workspaces"
+ros_dockerfile = ""
+ros_container_name = "pow_simros"
 exts = ["isaacsim.code_editor.vscode"]
 raw_args = ["--/renderer/raytracingMotion/enabled=false"]
 
