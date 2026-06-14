@@ -156,6 +156,29 @@ fi
 # ── Source ROS 2 base ─────────────────────────────────────────────────────
 source /opt/ros/humble/setup.bash
 
+# ── Clean stale colcon build artifacts ────────────────────────────────────
+# When the workspace volume was previously built at a different path
+# (e.g., on the host machine), colcon prefix scripts contain hardcoded
+# paths that don't exist in this container.  Detect and clean so the
+# next colcon build starts fresh.
+if [ -d "/humble_ws/build" ]; then
+    _stale=""
+    for _pf in /humble_ws/build/*/colcon_command_prefix_build.sh; do
+        [ -f "$_pf" ] || continue
+        # Extract the first quoted absolute path from the prefix script
+        _ref=$(grep -oP '"\K/[^"]+' "$_pf" 2>/dev/null | head -1)
+        if [ -n "$_ref" ] && [ ! -e "$_ref" ]; then
+            _stale="$_ref"
+            break
+        fi
+    done
+    if [ -n "$_stale" ]; then
+        echo "[pow_simros] Stale build artifacts detected (references missing path: $_stale)."
+        echo "[pow_simros] Cleaning build/, install/, and log/ for a fresh build..."
+        rm -rf /humble_ws/build /humble_ws/install /humble_ws/log
+    fi
+fi
+
 # ── 4. Source pre-built workspace overlay ─────────────────────────────────
 if [ -f "/humble_ws/install/local_setup.bash" ]; then
     source "/humble_ws/install/local_setup.bash"
