@@ -49,6 +49,14 @@ source .venv/bin/activate
 
 ### Usages
 
+Check the installed Pow CLI version
+
+```bash
+pow --version
+# or
+pow -v
+```
+
 Run Isaac Sim
 
 ```bash

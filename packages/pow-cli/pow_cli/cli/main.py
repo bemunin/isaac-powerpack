@@ -13,6 +13,14 @@ from .asset import asset_group
 
 
 @click.group()
+@click.version_option(
+    None,
+    "-v",
+    "--version",
+    package_name="pow-cli",
+    prog_name="pow",
+    message="%(prog)s %(version)s",
+)
 def pow_group():
     """Isaac Powerpack CLI for Isaac ROS and Isaac Sim development."""
     pass

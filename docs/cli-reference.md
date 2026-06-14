@@ -214,3 +214,15 @@ pow lint fix -s
 | `-s`, `--short` | Show feedback with file path and line number only |
 
 For a detailed explanation of each rule, patterns, and examples, see the [Lint Rules Guide](lint-rules.md).
+
+---
+
+## `pow --version`
+
+Print the installed Pow CLI version.
+
+```bash
+pow --version
+# or
+pow -v
+```
