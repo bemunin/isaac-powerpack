@@ -2,9 +2,20 @@
 
 All notable changes to the `pow-cli` package will be documented in this file.
 
+## [0.1.1] - 2026-06-14
+
+### Fixed
+
+- **ROS Docker container: `colcon build` fails for new packages** — The container
+  entrypoint now detects stale build artifacts (left from a host-path build) and
+  cleans `build/`, `install/`, and `log/` automatically before rebuilding.
+
+---
+
 ## [0.1.0] - 2026-06-05
 
 First stable release of `pow-cli`, promoted from `0.1.0-rc.1` with documentation improvements.
+
 
 ### Fixed
 
