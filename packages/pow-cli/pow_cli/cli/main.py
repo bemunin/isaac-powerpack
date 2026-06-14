@@ -20,9 +20,10 @@ from .asset import asset_group
     package_name="pow-cli",
     prog_name="pow",
     message="%(prog)s %(version)s",
+    help="Show the pow CLI version.",
 )
 def pow_group():
-    """Isaac Powerpack CLI for Isaac ROS and Isaac Sim development."""
+    """Manage Isaac Sim projects and simplify the development workflow."""
     pass
 
 

@@ -283,14 +283,14 @@ def _step6_ros_integration(
         nonlocal ros_cloned, ros_already_built
         if state == "cloning":
             ros_cloned = True
-            status.update("[bold green]Cloning Isaac ROS workspace...")
+            status.update("[bold green]Cloning Isaac Sim ROS workspace...")
         elif state == "existed":
-            status.update("[bold yellow]Isaac ROS workspace already exists. Checking build...")
+            status.update("[bold yellow]Isaac Sim ROS workspace already exists. Checking build...")
         elif state == "built":
             ros_already_built = True
             status.update("[bold yellow]Docker build already complete.")
         elif state == "building":
-            status.update("[bold green]Docker build: Isaac ROS workspace...")
+            status.update("[bold green]Docker build: Isaac Sim ROS workspace...")
         elif state.startswith("building:"):
             line = state[len("building:"):]
             status.update(f"[bold green]Docker build:[/bold green] [dim]{line[:80]}[/dim]")

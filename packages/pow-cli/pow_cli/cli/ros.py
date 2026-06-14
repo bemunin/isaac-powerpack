@@ -13,9 +13,8 @@ from ..core.ros_manager import RosManager
 @click.option("--verbose", "-v", is_flag=True, default=False, help="Show detailed feedback during container launch.")
 @click.pass_context
 def ros_cmd(ctx: click.Context, verbose: bool):
-    """Launch the pow_simros Docker container for ROS development.
+    """Launch the Isaac Sim ROS workspace docker container.
 
-    \b
     Starts an interactive bash session inside the pow_simros_<distro>
     container built during `pow init`.
 
