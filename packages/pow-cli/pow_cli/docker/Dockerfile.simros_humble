@@ -6,18 +6,23 @@
 #       #running-ros-in-docker-containers
 #
 # Usage:
-#   # Build:
+#   NOTE: `pow` builds and runs these images automatically (`pow init` /
+#   `pow ros`). The commands below are the equivalent manual invocations.
+#
+#   # Build (CUDA_VERSION selects the matching PyTorch wheel index):
 #   docker build \
 #     -f Dockerfile.simros_humble \
 #     -t pow_simros_humble \
 #     --build-context ros_ws=~/.pow/sim-ros/IsaacSim-ros_workspaces/humble_ws \
+#     --build-arg CUDA_VERSION=12.1 \
 #     .
 #
-#   # Run (mount workspace from host):
+#   # Run (HOST_UID/HOST_GID map the container user to the host user):
 #   docker run -it --rm --net=host \
+#     --env="HOST_UID=$(id -u)" --env="HOST_GID=$(id -g)" \
 #     --env="DISPLAY" --env="ROS_DOMAIN_ID" \
 #     -v ~/.pow/sim-ros/IsaacSim-ros_workspaces/humble_ws:/humble_ws \
-#     --name ros_ws_docker pow_simros_humble /bin/bash
+#     --name pow_simros pow_simros_humble /bin/bash
 # ──────────────────────────────────────────────────────────────────────────────
 
 # ── Step 1: Base ROS 2 desktop image ─────────────────────────────────────────
