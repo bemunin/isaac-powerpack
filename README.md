@@ -98,7 +98,7 @@ headless = false
 enable_ros = false
 isaacsim_ros_ws = "~/IsaacSim-ros_workspaces"
 ros_dockerfile = ""
-ros_container_name = "pow_simros"
+ros_docker_image = "pow_simros"
 exts = ["isaacsim.code_editor.vscode"]
 raw_args = ["--/renderer/raytracingMotion/enabled=false"]
 
@@ -135,10 +135,7 @@ After running `pow init`, your project will have the following structure:
 sim-project/
 ├── .vscode/              # VSCode configuration (launch.json, settings.json, etc.)
 ├── .modules/             # 3rd party module that use in your project e.g. pegasus sim
-├── .assets/              # 3D assets or any assets you use only in your project
 ├── exts/                 # Your custom Isaac Sim extensions
-├── scripts/              # Isaacsim Helper scripts to execute via vscode
-├── standalone/           # Standalone Python applications
 ├── usda/                 # USD scene description files
 ├── _isaacsim/            # Symlink → ~/.pow/isaacsim/5.1.0 for intellisense and autocomplete
 ├── .gitignore            # Pre-configured gitignore for Isaac Sim projects
@@ -163,11 +160,11 @@ sim-project/
 | Platform              | Version / Notes              |
 | :-------------------- | :--------------------------- |
 | OS                    | Ubuntu 22.04 / 24.04         |
-| ROS2                  | Humble / Jazzy               |
+| ROS2                  | Jazzy                        |
 | Isaac Sim             | `5.1.0`                      |
 
 > [!NOTE]
-> Pow is mainly developed and tested on Ubuntu 22.04 and ROS2 Humble environment.  
+> Isaac Sim runs on Ubuntu 22.04 and 24.04; the ROS 2 workspace and docker integration support Jazzy only.  
 
 <br>    
 

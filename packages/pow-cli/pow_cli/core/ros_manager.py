@@ -285,17 +285,18 @@ class RosManager:
 
         return {"status": "built", "image": docker_image}
 
-    def build_custom_ros_image(self, status_callback=None) -> dict:
+    def build_custom_ros_image(self, status_callback=None, no_cache: bool = False) -> dict:
         """Build a custom ROS image layered on top of ``pow_simros_<distro>``.
 
         Builds the Dockerfile referenced by ``ros_dockerfile`` in pow.toml,
-        tagging the result with ``ros_container_name``.  The custom Dockerfile is
+        tagging the result with ``ros_docker_image``.  The custom Dockerfile is
         expected to start with ``FROM pow_simros_<distro>`` so it inherits the
         base image's WORKDIR and entrypoint.
 
         Returns ``{"status": "skipped"}`` when ``ros_dockerfile`` is empty.
         The build always runs (Docker layer caching keeps unchanged builds fast)
-        so edits to the custom Dockerfile take effect on re-init.
+        so edits to the custom Dockerfile take effect on rebuild.  Pass
+        ``no_cache=True`` to bypass the layer cache entirely.
         """
         ros_dockerfile = self.config.ros_dockerfile
         if not ros_dockerfile:
@@ -312,7 +313,7 @@ class RosManager:
                 f"Check the 'ros_dockerfile' path in pow.toml."
             )
 
-        image = self.config.ros_container_name
+        image = self.config.ros_docker_image
 
         if status_callback:
             status_callback("custom_building")
@@ -321,8 +322,10 @@ class RosManager:
             "docker", "build",
             "-f", str(dockerfile_path),
             "-t", image,
-            str(project_root),
         ]
+        if no_cache:
+            build_cmd.append("--no-cache")
+        build_cmd.append(str(project_root))
 
         process = subprocess.Popen(
             build_cmd,
@@ -350,6 +353,19 @@ class RosManager:
 
         return {"status": "built", "image": image}
 
+    @staticmethod
+    def image_exists(image: str) -> bool:
+        """Check whether a docker image exists locally.
+
+        Appends ``:latest`` only when the reference carries no explicit tag.
+        """
+        ref = image if ":" in image.rsplit("/", 1)[-1] else f"{image}:latest"
+        result = subprocess.run(
+            ["docker", "image", "inspect", ref],
+            capture_output=True,
+        )
+        return result.returncode == 0
+
     # ── Container launching (from Runner) ────────────────────────────────────
 
     @staticmethod
@@ -368,11 +384,7 @@ class RosManager:
 
         docker_image = config.ros_image_name
 
-        image_check = subprocess.run(
-            ["docker", "image", "inspect", f"{docker_image}:latest"],
-            capture_output=True,
-        )
-        if image_check.returncode != 0:
+        if not RosManager.image_exists(docker_image):
             raise click.ClickException(
                 f"Docker image '{docker_image}' not found.\n"
                 "Run 'pow init' first to build the image."

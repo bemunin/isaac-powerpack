@@ -15,7 +15,7 @@ headless = false
 enable_ros = false
 isaacsim_ros_ws = "~/IsaacSim-ros_workspaces"
 ros_dockerfile = ""
-ros_container_name = "pow_simros"
+ros_docker_image = "pow_simros"
 exts = ["isaacsim.code_editor.vscode"]
 raw_args = ["--/renderer/raytracingMotion/enabled=false"]
 ```
@@ -30,8 +30,8 @@ raw_args = ["--/renderer/raytracingMotion/enabled=false"]
 | `headless`             | `bool`     | `false`                              | Run Isaac Sim without the GUI window. |
 | `enable_ros`           | `bool`     | `false`                              | Source the ROS 2 workspace environment before launching. |
 | `isaacsim_ros_ws`      | `string`   | `"~/IsaacSim-ros_workspaces"`        | Path to the cloned IsaacSim-ros_workspaces directory. |
-| `ros_dockerfile`       | `string`   | `""`                                 | Path (relative to project root) to a custom ROS Dockerfile built on top of the bundled `pow_simros_<distro>` base image. Empty = use the base image only. |
-| `ros_container_name`   | `string`   | `"pow_simros"`                       | Name for the ROS container launched by `pow ros` (and the custom image tag when `ros_dockerfile` is set). |
+| `ros_dockerfile`       | `string`   | `""`                                 | Path (relative to project root) to a custom ROS Dockerfile built on top of the bundled `pow_simros_jazzy` base image. Empty = use the base image only. |
+| `ros_docker_image`     | `string`   | `"pow_simros"`                       | Docker image name for the ROS image launched by `pow ros` (the custom image tag when `ros_dockerfile` is set). The container name is derived from the image name (`/` and `:` replaced with `_`). |
 | `exts`                 | `string[]` | `["isaacsim.code_editor.vscode"]`    | Extensions to enable on launch. |
 | `raw_args`             | `string[]` | `["--/renderer/raytracingMotion/enabled=false"]` | Extra CLI arguments passed directly to Isaac Sim. |
 
@@ -39,9 +39,9 @@ raw_args = ["--/renderer/raytracingMotion/enabled=false"]
 
 ## Custom ROS Image
 
-By default, `pow init` builds a bundled ROS image tagged `pow_simros_<distro>`
-(e.g. `pow_simros_humble`), and `pow ros` runs it in a container named
-`pow_simros`.
+By default, `pow init` builds a bundled ROS 2 Jazzy image tagged
+`pow_simros_jazzy`, and `pow ros` runs it in a container named after the image
+(`pow_simros_jazzy`). Jazzy is the only supported ROS distribution.
 
 To add your own ROS packages or tooling, point `ros_dockerfile` at a Dockerfile
 in your project that extends the bundled base image:
@@ -50,27 +50,28 @@ in your project that extends the bundled base image:
 [sim]
 enable_ros = true
 ros_dockerfile = "docker/Dockerfile.simros"
-ros_container_name = "my_robot_sim"
+ros_docker_image = "my_robot_sim"
 ```
 
-Your custom Dockerfile **must** start with `FROM pow_simros_humble` (Ubuntu
-22.04) or `FROM pow_simros_jazzy` (Ubuntu 24.04) so it inherits the base image's
-workspace and entrypoint:
+Your custom Dockerfile **must** start with `FROM pow_simros_jazzy` so it
+inherits the base image's workspace and entrypoint:
 
 ```dockerfile
-FROM pow_simros_humble
+FROM pow_simros_jazzy
 
-RUN apt-get update && apt-get install -y ros-humble-my-pkg
+RUN apt-get update && apt-get install -y ros-jazzy-my-pkg
 # ... your customizations
 ```
 
 When `ros_dockerfile` is set, `pow init` first builds the base image, then builds
-your Dockerfile and tags it with `ros_container_name`. `pow ros` then runs that
-custom image in a container named `ros_container_name`.
+your Dockerfile and tags it with `ros_docker_image`. `pow ros` then runs that
+custom image in a container named after the image (with characters like `/` and
+`:` replaced by `_`).
 
 > [!NOTE]
 > `pow.toml` is written at the end of `pow init`. After setting `ros_dockerfile`
-> and creating your Dockerfile, re-run `pow init` to build the custom image.
+> and creating your Dockerfile, run `pow ros build` to (re)build the custom
+> image without re-running the full init.
 
 ---
 
@@ -175,7 +176,7 @@ headless = false
 enable_ros = false
 isaacsim_ros_ws = "~/IsaacSim-ros_workspaces"
 ros_dockerfile = ""
-ros_container_name = "pow_simros"
+ros_docker_image = "pow_simros"
 exts = ["isaacsim.code_editor.vscode"]
 raw_args = ["--/renderer/raytracingMotion/enabled=false"]
 

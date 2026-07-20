@@ -80,8 +80,8 @@ Pattern: @../../../../<ros_ws_name>/<rest>@
 **Example** (with `isaacsim_ros_ws = "~/IsaacSim-ros_workspaces"`):
 
 ```diff
-- @../../../../IsaacSim-ros_workspaces/humble_ws/src/nova_carter/meshes/chassis.usd@
-+ @user-home/IsaacSim-ros_workspaces/humble_ws/src/nova_carter/meshes/chassis.usd@
+- @../../../../IsaacSim-ros_workspaces/jazzy_ws/src/nova_carter/meshes/chassis.usd@
++ @user-home/IsaacSim-ros_workspaces/jazzy_ws/src/nova_carter/meshes/chassis.usd@
 ```
 
 > [!NOTE]

@@ -14,7 +14,7 @@ This interactive command walks through a 10-step setup:
 4. Downloads and installs your specified Isaac Sim version in `.pow/isaacsim/<version>` folder
 5. Applies post-install optimizations
 6. Sets up ROS integration (optional — builds Docker images)
-7. Creates project structure (`exts/`, `scripts/`, `.modules/`, `.assets/`, `standalone/`, `usda/`)
+7. Creates project structure (`exts/`, `.modules/`, `usda/`)
 8. Symlinks the managed Isaac Sim installation into the project for intellisense/code completion
 9. Configures VS Code settings
 10. Generates `pow.toml` configuration
@@ -76,7 +76,7 @@ pow python -p perf my_script.py
 
 ## `pow ros`
 
-Launch the ROS Docker container for ROS development. Requires ROS integration to be enabled during `pow init`. By default this runs the bundled `pow_simros_<distro>` image in a container named `pow_simros`; when `ros_dockerfile` / `ros_container_name` are set in `pow.toml`, it runs your custom image in a container named `ros_container_name`. See more about the ROS 2 enable flag and custom images in the [Configuration Guide](docs/configuration.md).
+Launch the ROS Docker container for ROS development. Requires ROS integration to be enabled during `pow init`. By default this runs the bundled `pow_simros_jazzy` image (ROS 2 Jazzy is the only supported distribution); when `ros_dockerfile` / `ros_docker_image` are set in `pow.toml`, it runs your custom image instead. The container is named after the image (characters like `/` and `:` replaced with `_`). See more about the ROS 2 enable flag and custom images in the [Configuration Guide](docs/configuration.md).
 
 ```bash
 # Start an interactive ROS bash session
@@ -87,11 +87,29 @@ pow ros -v
 
 # Pass a custom command to the container
 pow ros -- ros2 topic list
+
+# Same as bare `pow ros`; use when a forwarded arg collides with a subcommand name
+pow ros launch <args>
 ```
 
 | Option              | Description                              |
 | :------------------ | :--------------------------------------- |
 | `-v`, `--verbose`   | Show detailed feedback during launch     |
+
+### `pow ros build`
+
+Build the custom ROS image from the Dockerfile referenced by `ros_dockerfile` in `pow.toml`, tagging it with `ros_docker_image`. If the base `pow_simros_jazzy` image is missing, it is built first (this requires the ROS workspace set up by `pow init`).
+
+```bash
+pow ros build
+
+# Bypass the Docker layer cache
+pow ros build --no-cache
+```
+
+| Option              | Description                                    |
+| :------------------ | :--------------------------------------------- |
+| `--no-cache`        | Build without using the Docker layer cache     |
 
 ---
 

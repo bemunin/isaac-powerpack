@@ -25,8 +25,8 @@ class TestInitCmd:
             "pow_cli.core.ros_manager.RosManager.setup_ros_workspace",
             return_value={
                 "status": "success",
-                "ros_distro": "humble",
-                "ubuntu_version": "22.04",
+                "ros_distro": "jazzy",
+                "ubuntu_version": "24.04",
                 "path": "/tmp/.pow/sim-ros"
             }
         )

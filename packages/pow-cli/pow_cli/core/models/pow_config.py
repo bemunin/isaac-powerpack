@@ -4,6 +4,7 @@ except ImportError:
     import tomli as tomllib
 import distro
 import click
+import re
 from pathlib import Path
 from typing import Any, Optional
 
@@ -27,7 +28,7 @@ class PowConfig:
 
     # ── ROS constants ────────────────────────────────────────────────────────
 
-    ROS_DISTRO_MAP: dict[str, str] = {"24.04": "jazzy", "22.04": "humble"}
+    ROS_DISTRO = "jazzy"
 
     def __new__(cls):
         if cls._instance is None:
@@ -150,14 +151,15 @@ class PowConfig:
             return ""
 
     @property
-    def ros_container_name(self) -> str:
-        """Name for the ROS container (and custom image tag).
+    def ros_docker_image(self) -> str:
+        """Docker image name for the ROS image.
 
-        Reads ``ros_container_name`` from pow.toml ``[sim]``.  Defaults to
-        ``"pow_simros"`` when the key is missing or pow.toml is not loaded.
+        Reads ``ros_docker_image`` from pow.toml ``[sim]``.  Used as the image
+        tag when ``ros_dockerfile`` is set.  Defaults to ``"pow_simros"`` when
+        the key is missing or pow.toml is not loaded.
         """
         try:
-            return self.get("ros_container_name", "pow_simros") or "pow_simros"
+            return self.get("ros_docker_image", "pow_simros") or "pow_simros"
         except RuntimeError:
             return "pow_simros"
 
@@ -165,24 +167,39 @@ class PowConfig:
     def ros_image_name(self) -> str:
         """Image to run with ``pow ros``.
 
-        Returns the custom ``ros_container_name`` tag when ``ros_dockerfile`` is
+        Returns the custom ``ros_docker_image`` tag when ``ros_dockerfile`` is
         set, otherwise the bundled ``pow_simros_<distro>`` base image.
         """
         if self.ros_dockerfile:
-            return self.ros_container_name
+            return self.ros_docker_image
         return f"pow_simros_{self.ros_distro}"
 
     @property
+    def ros_container_name(self) -> str:
+        """Container name derived from ``ros_image_name``.
+
+        Docker container names must match ``[a-zA-Z0-9][a-zA-Z0-9_.-]*``, so
+        characters like ``/`` and ``:`` in the image reference are replaced
+        with ``_``.
+        """
+        name = re.sub(r"[^a-zA-Z0-9_.-]", "_", self.ros_image_name)
+        name = re.sub(r"^[^a-zA-Z0-9]+", "", name)
+        return name or "pow_simros"
+
+    @property
     def ros_distro(self) -> str:
-        """Get the ROS distribution for the current OS version."""
-        return self.ROS_DISTRO_MAP.get(self.ubuntu_version, "humble")
+        """ROS 2 distribution used for the ROS workspace and docker image.
+
+        Only jazzy is supported (buildable on Ubuntu 22.04 and 24.04 hosts).
+        """
+        return self.ROS_DISTRO
 
     @property
     def ubuntu_version(self) -> str:
         """Get the current Ubuntu version or fallback to 22.04."""
         try:
             v = distro.version()
-            if v in self.ROS_DISTRO_MAP:
+            if v in self.SUPPORTED_UBUNTU_VERSIONS:
                 return v
         except Exception:
             pass

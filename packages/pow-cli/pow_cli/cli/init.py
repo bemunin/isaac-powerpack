@@ -359,7 +359,7 @@ def _step6_ros_integration(
     # Build custom ROS image layered on top of pow_simros_<distro>
     custom_dockerfile = ros_mgr.config.ros_dockerfile
     if custom_dockerfile:
-        custom_image = ros_mgr.config.ros_container_name
+        custom_image = ros_mgr.config.ros_docker_image
 
         def custom_status_callback(state):
             if state == "custom_building":
@@ -387,7 +387,7 @@ def _step6_ros_integration(
 def _step7_project_structure(initializer: Initializer):
     """Create local project folders and .gitignore."""
     console.print("[bold blue][7/10] 🏗️ Project Structure:[/bold blue] Creating local folders...")
-    local_folders = ["exts", "scripts", ".modules", ".assets", "standalone", "usda"]
+    local_folders = ["exts", ".modules", "usda"]
 
     with Progress(
         SpinnerColumn(),

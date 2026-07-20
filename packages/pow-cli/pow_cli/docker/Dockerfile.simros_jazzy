@@ -74,7 +74,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-pip \
     ros-jazzy-vision-msgs \
     ros-jazzy-ackermann-msgs \
-    ros-jazzy-foxglove-bridge \
     sudo \
     gosu \
     && rm -rf /var/lib/apt/lists/*
@@ -119,6 +118,23 @@ RUN --mount=type=bind,from=ros_ws,target=/jazzy_ws \
     apt-get update && \
     rosdep install --from-paths src --ignore-src --rosdistro=jazzy -y -r \
     "
+
+# ── Interactive shell environment ────────────────────────────────────────────
+# The entrypoint sources ROS before exec'ing the command, which carries the
+# environment variables over — but bash completion functions (ros2/colcon
+# argcomplete) are shell state and do not survive exec.  Source the setup
+# files again in /etc/bash.bashrc so every interactive shell (any user,
+# including `docker exec` attaches) gets tab completion.
+RUN cat >> /etc/bash.bashrc <<'BASHRCEOF'
+
+# ── pow_simros: ROS 2 environment for interactive shells ──
+if [ -f /opt/ros/jazzy/setup.bash ]; then
+    source /opt/ros/jazzy/setup.bash
+fi
+if [ -f /jazzy_ws/install/setup.bash ]; then
+    source /jazzy_ws/install/setup.bash
+fi
+BASHRCEOF
 
 # ── Entrypoint ───────────────────────────────────────────────────────────────
 # Resolves FastDDS config (user mount > workspace copy > embedded default),
@@ -190,8 +206,8 @@ if [ -d "/jazzy_ws/build" ]; then
 fi
 
 # ── 4. Source pre-built workspace overlay ─────────────────────────────────
-if [ -f "/jazzy_ws/install/local_setup.bash" ]; then
-    source "/jazzy_ws/install/local_setup.bash"
+if [ -f "/jazzy_ws/install/setup.bash" ]; then
+    source "/jazzy_ws/install/setup.bash"
 else
     cd /jazzy_ws
     # If we need to build, do it AS the new user so permissions are correct

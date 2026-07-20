@@ -7,17 +7,24 @@ All notable changes to the `pow-cli` package will be documented in this file.
 ### Added
 
 - **Custom ROS Dockerfile (`pow init`)**
-  - New `ros_dockerfile` config in `pow.toml` — point to a project-local Dockerfile that layers on top of the bundled `pow_simros_<distro>` base image
-  - New `ros_container_name` config in `pow.toml` — set a custom container/image name (defaults to `pow_simros`)
+  - New `ros_dockerfile` config in `pow.toml` — point to a project-local Dockerfile that layers on top of the bundled `pow_simros_jazzy` base image
+  - New `ros_docker_image` config in `pow.toml` — set a custom image name/tag for the custom build (defaults to `pow_simros`)
   - `pow init` now builds the custom image automatically after the base image when `ros_dockerfile` is set
   - `pow ros` launches the custom image when configured, otherwise falls back to the base image
+- **`pow ros build`** — build the custom image from `ros_dockerfile` without re-running `pow init`; builds the `pow_simros_jazzy` base image first if it is missing, and supports `--no-cache`. `pow ros` is now a command group (bare `pow ros [args...]` usage is unchanged; `pow ros launch` is the explicit form)
 - **Version flag (`pow --version` / `pow -v`)** — quickly check the installed `pow-cli` version from the command line
 
 ### Changed
 
 - Updated CLI description to *"Manage Isaac Sim projects and simplify the development workflow"*
 - Renamed status messages from *"Isaac ROS workspace"* to *"Isaac Sim ROS workspace"* for clarity
-- Container name is now read from `ros_container_name` config instead of being hard-coded
+- `pow init` no longer creates the `scripts/`, `.assets/`, and `standalone/` project folders (only `exts/`, `.modules/`, `usda/`). A manually created `scripts/` folder is still mounted into the ROS container when present
+- **Breaking (vs earlier 0.2.0 rc):** the `ros_container_name` config key was renamed to `ros_docker_image`. The container name is no longer configured directly — it is derived from the image name (`/` and `:` replaced with `_`), so default setups now get a container named `pow_simros_jazzy` instead of `pow_simros`
+- **Breaking (vs earlier 0.2.0 rc):** ROS 2 Humble support was removed — the ROS workspace and docker integration now support Jazzy only (`Dockerfile.simros_humble` deleted). Isaac Sim itself still runs on Ubuntu 22.04 and 24.04; Jazzy workspaces build on both
+
+### Fixed
+
+- **`ros2` tab completion inside the `pow_simros` container** — the entrypoint sourced ROS before exec'ing bash, which carried environment variables but not bash completion functions. Interactive shells now re-source `/opt/ros/jazzy/setup.bash` and the workspace overlay via `/etc/bash.bashrc`, so `ros2` / `colcon` autocomplete works without manually sourcing `setup.bash` (requires rebuilding the image)
 
 ---
 

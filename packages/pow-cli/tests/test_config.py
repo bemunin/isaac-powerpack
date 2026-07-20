@@ -305,7 +305,7 @@ extends = "a"
 # ── custom ROS image config tests ───────────────────────────────────────────────
 
 def test_ros_defaults(tmp_path, monkeypatch, reset_config_singleton):
-    """ros_dockerfile/ros_container_name fall back to defaults when unset."""
+    """ros_dockerfile/ros_docker_image fall back to defaults when unset."""
     root = tmp_path / "project"
     root.mkdir()
     (root / "pow.toml").write_text("[sim]\nenable_ros = true\n")
@@ -313,18 +313,19 @@ def test_ros_defaults(tmp_path, monkeypatch, reset_config_singleton):
     config = PowConfig()
 
     assert config.ros_dockerfile == ""
-    assert config.ros_container_name == "pow_simros"
-    # No custom dockerfile → base image name
+    assert config.ros_docker_image == "pow_simros"
+    # No custom dockerfile → base image name; container name derived from it
     assert config.ros_image_name == f"pow_simros_{config.ros_distro}"
+    assert config.ros_container_name == f"pow_simros_{config.ros_distro}"
 
 
 def test_ros_custom_values(tmp_path, monkeypatch, reset_config_singleton):
-    """ros_dockerfile/ros_container_name are read from [sim]."""
+    """ros_dockerfile/ros_docker_image are read from [sim]."""
     content = """
 [sim]
 enable_ros = true
 ros_dockerfile = "docker/Dockerfile.simros"
-ros_container_name = "my_robot_sim"
+ros_docker_image = "my_robot_sim"
 """
     root = tmp_path / "project"
     root.mkdir()
@@ -333,9 +334,31 @@ ros_container_name = "my_robot_sim"
     config = PowConfig()
 
     assert config.ros_dockerfile == "docker/Dockerfile.simros"
-    assert config.ros_container_name == "my_robot_sim"
-    # Custom dockerfile set → image name is the container name
+    assert config.ros_docker_image == "my_robot_sim"
+    # Custom dockerfile set → image name is the docker image name
     assert config.ros_image_name == "my_robot_sim"
+    # Container name is derived from the image name
+    assert config.ros_container_name == "my_robot_sim"
+
+
+def test_ros_container_name_sanitizes_image_reference(
+    tmp_path, monkeypatch, reset_config_singleton
+):
+    """Registry-style image references are sanitized into valid container names."""
+    content = """
+[sim]
+enable_ros = true
+ros_dockerfile = "docker/Dockerfile.simros"
+ros_docker_image = "ghcr.io/acme/robot:v1"
+"""
+    root = tmp_path / "project"
+    root.mkdir()
+    (root / "pow.toml").write_text(content)
+    monkeypatch.chdir(root)
+    config = PowConfig()
+
+    assert config.ros_image_name == "ghcr.io/acme/robot:v1"
+    assert config.ros_container_name == "ghcr.io_acme_robot_v1"
 
 
 def test_ros_defaults_without_pow_toml(tmp_path, monkeypatch, reset_config_singleton):
@@ -346,4 +369,4 @@ def test_ros_defaults_without_pow_toml(tmp_path, monkeypatch, reset_config_singl
     config = PowConfig()
 
     assert config.ros_dockerfile == ""
-    assert config.ros_container_name == "pow_simros"
+    assert config.ros_docker_image == "pow_simros"
