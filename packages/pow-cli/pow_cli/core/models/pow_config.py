@@ -195,6 +195,15 @@ class PowConfig:
         return self.ROS_DISTRO
 
     @property
+    def ros_bridge_distro(self) -> str:
+        """ROS distro of the Isaac Sim internal ROS2 bridge, from host Ubuntu.
+
+        24.04 -> jazzy, otherwise humble (matches the libs shipped in
+        exts/isaacsim.ros2.bridge/).
+        """
+        return "jazzy" if self.ubuntu_version == "24.04" else "humble"
+
+    @property
     def ubuntu_version(self) -> str:
         """Get the current Ubuntu version or fallback to 22.04."""
         try:

@@ -33,5 +33,10 @@ packages = ["pow_cli"]
 [dependency-groups]
 dev = ["pytest>=9.0.2", "pytest-mock>=3.15.1"]
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Never recurse into the Isaac Sim symlink created by `pow init` / init tests.
+norecursedirs = ["_isaacsim"]
+
 [[tool.uv.index]]
 url = "https://pypi.nvidia.com/"

@@ -275,28 +275,19 @@ def _step6_ros_integration(
     console.print(f"   [dim]Workspace path:[/dim] {display_path}")
 
     ros_cloned = False
-    ros_already_built = False
 
     def ros_status_callback(state):
-        nonlocal ros_cloned, ros_already_built
+        nonlocal ros_cloned
         if state == "cloning":
             ros_cloned = True
             status.update("[bold green]Cloning Isaac Sim ROS workspace...")
         elif state == "existed":
-            status.update("[bold yellow]Isaac Sim ROS workspace already exists. Checking build...")
-        elif state == "built":
-            ros_already_built = True
-            status.update("[bold yellow]Docker build already complete.")
-        elif state == "building":
-            status.update("[bold green]Docker build: Isaac Sim ROS workspace...")
-        elif state.startswith("building:"):
-            line = state[len("building:"):]
-            status.update(f"[bold green]Docker build:[/bold green] [dim]{line[:80]}[/dim]")
+            status.update("[bold yellow]Isaac Sim ROS workspace already exists.")
 
     # Resolve the tilde path for actual filesystem operations
     resolved_ws = Path(ws_path).expanduser()
 
-    ros_build_failed = False
+    ros_setup_failed = False
 
     with console.status("Preparing ROS workspace...") as status:
         try:
@@ -305,11 +296,11 @@ def _step6_ros_integration(
                 ws_path=resolved_ws,
             )
         except Exception as e:
-            ros_build_failed = True
+            ros_setup_failed = True
             console.print(f"   [bold red]❌ ROS Setup Error:[/bold red] {e}")
 
-    if ros_build_failed:
-        console.print("   [yellow]⊖[/yellow] Skipping remaining steps due to ROS build error.")
+    if ros_setup_failed:
+        console.print("   [yellow]⊖[/yellow] Skipping remaining steps due to ROS setup error.")
         raise SystemExit(1)
 
     if ros_cloned:
@@ -317,11 +308,11 @@ def _step6_ros_integration(
     else:
         console.print(f"   [yellow]✔[/yellow] IsaacSim-ros_workspaces already available in [dim]{display_path}[/dim]")
 
-    distro_label = f"ROS [bold]{ros_res['ros_distro']}[/bold] (Ubuntu {ros_res['ubuntu_version']})"
-    if ros_already_built:
-        console.print(f"   [yellow]✔[/yellow] Docker build already complete for {distro_label}.")
-    else:
-        console.print(f"   [green]✔[/green] Docker build complete for {distro_label}.")
+    bridge_distro = ros_mgr.config.ros_bridge_distro
+    console.print(
+        f"   [green]✔[/green] ROS bridge: [bold]{bridge_distro}[/bold] "
+        f"(Ubuntu {ros_res['ubuntu_version']}) via Isaac Sim internal libs."
+    )
 
     # Build pow_simros Docker image
     simros_already_built = False

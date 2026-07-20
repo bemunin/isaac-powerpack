@@ -1,9 +1,11 @@
 import re
 
+import click
 import pytest
 from pathlib import Path
 from unittest.mock import MagicMock
 
+from pow_cli.core.models.pow_config import PowConfig
 from pow_cli.core.ros_manager import RosManager
 
 
@@ -131,6 +133,83 @@ def test_image_exists_keeps_explicit_tag(mocker):
     assert run.call_args[0][0] == [
         "docker", "image", "inspect", "ghcr.io/acme/robot:v1"
     ]
+
+
+# ── isaacsim_bridge_env ─────────────────────────────────────────────────────────
+
+def _make_bridge_config(tmp_path, bridge_distro="humble", version="5.1.0"):
+    """MagicMock PowConfig with an Isaac Sim install containing bridge libs."""
+    cfg = MagicMock()
+    cfg.global_path = tmp_path
+    cfg.ros_bridge_distro = bridge_distro
+    cfg.get.return_value = version
+    lib = tmp_path / "isaacsim" / version / "exts" / "isaacsim.ros2.bridge" / bridge_distro / "lib"
+    lib.mkdir(parents=True)
+    return cfg, lib
+
+
+def test_ros_bridge_distro_maps_ubuntu_version():
+    """Ubuntu 24.04 selects the jazzy bridge, anything else humble."""
+    get_distro = PowConfig.ros_bridge_distro.fget
+    assert get_distro is not None
+    fake_self = MagicMock()
+    fake_self.ubuntu_version = "24.04"
+    assert get_distro(fake_self) == "jazzy"
+    fake_self.ubuntu_version = "22.04"
+    assert get_distro(fake_self) == "humble"
+
+
+def test_isaacsim_bridge_env_sets_bridge_variables(tmp_path, mocker):
+    """ROS_DISTRO, RMW and the bridge lib path are set from the config."""
+    cfg, lib = _make_bridge_config(tmp_path, bridge_distro="jazzy")
+    mocker.patch.dict("os.environ", {}, clear=True)
+
+    env = RosManager.isaacsim_bridge_env(cfg)
+
+    assert env["ROS_DISTRO"] == "jazzy"
+    assert env["RMW_IMPLEMENTATION"] == "rmw_fastrtps_cpp"
+    assert env["LD_LIBRARY_PATH"].split(":")[-1] == str(lib)
+
+
+def test_isaacsim_bridge_env_cleans_host_ros_environment(tmp_path, mocker):
+    """Conflicting ROS vars are removed and /opt/ros paths stripped."""
+    cfg, lib = _make_bridge_config(tmp_path, bridge_distro="humble")
+    mocker.patch.dict(
+        "os.environ",
+        {
+            "ROS_VERSION": "2",
+            "ROS_PYTHON_VERSION": "3",
+            "ROS_DISTRO": "iron",
+            "AMENT_PREFIX_PATH": "/opt/ros/iron",
+            "COLCON_PREFIX_PATH": "/opt/ros/iron",
+            "PYTHONPATH": "/opt/ros/iron/lib/python3.10/site-packages",
+            "CMAKE_PREFIX_PATH": "/opt/ros/iron",
+            "LD_LIBRARY_PATH": "/opt/ros/iron/lib:/usr/local/lib",
+        },
+        clear=True,
+    )
+
+    env = RosManager.isaacsim_bridge_env(cfg)
+
+    for var in (
+        "ROS_VERSION", "ROS_PYTHON_VERSION", "AMENT_PREFIX_PATH",
+        "COLCON_PREFIX_PATH", "PYTHONPATH", "CMAKE_PREFIX_PATH",
+    ):
+        assert var not in env
+    assert env["ROS_DISTRO"] == "humble"
+    assert env["LD_LIBRARY_PATH"] == f"/usr/local/lib:{lib}"
+
+
+def test_isaacsim_bridge_env_missing_libs_raises(tmp_path, mocker):
+    """A missing bridge lib directory raises a ClickException."""
+    cfg = MagicMock()
+    cfg.global_path = tmp_path
+    cfg.ros_bridge_distro = "humble"
+    cfg.get.return_value = "5.1.0"
+    mocker.patch.dict("os.environ", {}, clear=True)
+
+    with pytest.raises(click.ClickException, match="bridge libs not found"):
+        RosManager.isaacsim_bridge_env(cfg)
 
 
 # ── container launching uses ros_container_name ─────────────────────────────────

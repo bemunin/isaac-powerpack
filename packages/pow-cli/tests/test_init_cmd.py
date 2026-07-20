@@ -108,7 +108,7 @@ class TestInitCmd:
 
         result = self.runner.invoke(init_cmd, env={"NO_COLOR": "1", "TERM": "dumb"})
         assert result.exit_code == 0
-        assert "Docker build" in result.output
+        assert "ROS bridge:" in result.output
 
     def test_init_cmd_ros_skipped_output(self):
         self.mock_create_global.return_value = {"global_existed": True, "results": []}
