@@ -1,5 +1,4 @@
 import pytest
-from pathlib import Path
 from click.testing import CliRunner
 
 from pow_cli.cli.init import init_cmd
@@ -46,7 +45,7 @@ class TestInitCmd:
     def test_init_cmd_step_1_output(self):
         result = self.runner.invoke(init_cmd, input="n\nn\n", env={"NO_COLOR": "1", "TERM": "dumb"}) 
         assert result.exit_code == 0
-        assert "[1/8] 🔧 Config:" in result.output
+        assert "[1/10] 🔧 Config:" in result.output
         assert "Using global directory" in result.output
 
     def test_init_cmd_missing_pyproject_toml(self, mocker):
@@ -78,13 +77,37 @@ class TestInitCmd:
     def test_init_cmd_ros_integration_output(self, mocker):
         self.mock_create_global.return_value = {"global_existed": True, "results": []}
         mocker.patch("pow_cli.cli.init.Confirm.ask", return_value=True)
-        
+        mocker.patch(
+            "pow_cli.cli.init.Prompt.ask", return_value="~/IsaacSim-ros_workspaces"
+        )
+        mocker.patch(
+            "pow_cli.core.ros_manager.RosManager.build_simros_image",
+            return_value={"status": "existed", "image": "pow_simros_jazzy"},
+        )
+        mocker.patch(
+            "pow_cli.core.ros_manager.RosManager.build_custom_ros_image",
+            return_value={"status": "skipped"},
+        )
+        mocker.patch(
+            "pow_cli.core.initializer.Initializer.link_managed_isaacsim",
+            return_value={"status": "Existed", "path": "_isaacsim"},
+        )
+        mocker.patch(
+            "pow_cli.core.initializer.Initializer.setup_vscode_configs",
+            return_value={"status": "Success", "results": []},
+        )
+        mocker.patch(
+            "pow_cli.core.initializer.Initializer.setup_omniverse_user_home_alias",
+            return_value={"status": "exists", "path": "omniverse.toml"},
+        )
+
         # Force Path("pow.toml").exists() to be False so we skip the first Confirm.
         def mock_exists(path_obj, *args, **kwargs):
             return str(path_obj) == "pyproject.toml"
         mocker.patch("pathlib.Path.exists", side_effect=mock_exists, autospec=True)
-        
+
         result = self.runner.invoke(init_cmd, env={"NO_COLOR": "1", "TERM": "dumb"})
+        assert result.exit_code == 0
         assert "Docker build" in result.output
 
     def test_init_cmd_ros_skipped_output(self):

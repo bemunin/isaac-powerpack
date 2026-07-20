@@ -307,7 +307,6 @@ def list_cmd():
     console.print()
     try:
         from ..core.asset_manager import REGISTRIES
-        from itertools import groupby
 
         target_groups = set()
         for r in REGISTRIES:

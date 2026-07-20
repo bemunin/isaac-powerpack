@@ -1,9 +1,4 @@
 import pytest
-try:
-    import tomllib
-except ImportError:
-    import tomli as tomllib
-from pathlib import Path
 from pow_cli.core.models.pow_config import PowConfig
 
 @pytest.fixture

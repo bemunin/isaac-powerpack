@@ -96,7 +96,7 @@ class RosManager:
         )
 
         if not distro_local_setup.exists() or not isaac_sim_ros_setup.exists():
-            raise click.ClickException(f"ROS setup files not found. Are you sure you ran `pow init` properly?")
+            raise click.ClickException("ROS setup files not found. Are you sure you ran `pow init` properly?")
 
         distro_env = RosManager.source_setup_file(distro_local_setup, shell_type, env=os.environ.copy())
         output_env = RosManager.source_setup_file(isaac_sim_ros_setup, shell_type, env=distro_env)
@@ -229,11 +229,7 @@ class RosManager:
         dockerfile_path = Path(__file__).parent.parent / "docker" / f"Dockerfile.simros_{ros_distro}"
 
         # Check if image already exists
-        image_check = subprocess.run(
-            ["docker", "image", "inspect", f"{docker_image}:latest"],
-            capture_output=True,
-        )
-        if image_check.returncode == 0:
+        if RosManager.image_exists(docker_image):
             if status_callback:
                 status_callback("simros_built")
             return {"status": "existed", "image": docker_image}
@@ -387,7 +383,7 @@ class RosManager:
         if not RosManager.image_exists(docker_image):
             raise click.ClickException(
                 f"Docker image '{docker_image}' not found.\n"
-                "Run 'pow init' first to build the image."
+                "Run 'pow ros build' (or 'pow init') to build it."
             )
 
         return config, docker_image

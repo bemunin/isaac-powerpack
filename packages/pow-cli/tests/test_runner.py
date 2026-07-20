@@ -1,10 +1,7 @@
 import pytest
-import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock
-from click.testing import CliRunner
 
-from pow_cli.core.models.pow_config import PowConfig
 from pow_cli.core.runner import Runner
 
 @pytest.fixture
@@ -42,7 +39,9 @@ def test_build_launch_command_default(mock_config, mocker):
     # Check that components correctly map to array Elements
     assert "/home/user/.pow/isaacsim/5.1.0/isaac-sim.sh" in cmd[0]
     assert "--ext-folder" in cmd
-    assert "./exts" in cmd
+    # ext_folders are resolved to absolute paths (relative paths break when
+    # pow run is invoked from a project subdirectory)
+    assert str(Path("/home/user/myproject/exts")) in cmd
     assert "--enable" in cmd
     assert "my.ext" in cmd
     assert "--arg1" in cmd
@@ -60,7 +59,7 @@ def test_build_launch_command_skips_nonexisting_ext_folders(mock_config, mocker)
     mocker.patch("pathlib.Path.is_dir", return_value=False)
     cmd = Runner.build_launch_command(mock_config, "default")
     assert "--ext-folder" not in cmd
-    assert "./exts" not in cmd
+    assert not any("exts" in c for c in cmd)
 
 def test_run_isaacsim_calls_subprocess(mock_config, mocker):
     mocker.patch("pathlib.Path.exists", return_value=True)

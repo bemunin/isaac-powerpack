@@ -5,8 +5,6 @@ from pathlib import Path
 import click
 from rich.markup import escape
 from rich.panel import Panel
-from rich.table import Table
-from rich.text import Text
 
 from ..common.utils import console
 from ..core.linter import AliasConfig, lint_file, fix_file, scan_directory

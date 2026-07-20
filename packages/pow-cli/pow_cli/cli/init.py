@@ -7,10 +7,8 @@ import click
 from rich.panel import Panel
 from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
 from rich.prompt import Confirm, Prompt
-from rich.text import Text
 
 from ..common.utils import console
-from ..core.models.pow_config import PowConfig
 from ..core.initializer import Initializer
 from ..core.ros_manager import RosManager
 
@@ -63,7 +61,7 @@ def _step1_check_config(global_dir_name: str) -> bool:
     """Print config header and verify pyproject.toml exists. Return False to abort."""
     if not Path("pyproject.toml").exists():
         console.print(
-            "\n[bold red][1/8] ❌ Error:[/bold red] pyproject.toml not found. "
+            "\n[bold red][1/10] ❌ Error:[/bold red] pyproject.toml not found. "
             "Please run this command in a valid project directory."
         )
         return False
@@ -341,7 +339,7 @@ def _step6_ros_integration(
 
     with console.status("Building pow_simros image...") as simros_status:
         try:
-            simros_res = ros_mgr.build_simros_image(
+            ros_mgr.build_simros_image(
                 status_callback=simros_status_callback,
                 ws_path=resolved_ws,
             )

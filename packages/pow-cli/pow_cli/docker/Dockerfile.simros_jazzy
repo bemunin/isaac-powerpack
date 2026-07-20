@@ -22,7 +22,7 @@
 #     --env="HOST_UID=$(id -u)" --env="HOST_GID=$(id -g)" \
 #     --env="DISPLAY" --env="ROS_DOMAIN_ID" \
 #     -v ~/.pow/sim-ros/IsaacSim-ros_workspaces/jazzy_ws:/jazzy_ws \
-#     --name pow_simros pow_simros_jazzy /bin/bash
+#     --name pow_simros_jazzy pow_simros_jazzy /bin/bash
 # ──────────────────────────────────────────────────────────────────────────────
 
 # ── Step 1: Base ROS 2 desktop image ─────────────────────────────────────────

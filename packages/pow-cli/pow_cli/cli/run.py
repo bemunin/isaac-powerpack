@@ -1,8 +1,6 @@
 """Run command implementation."""
 
 import click
-from rich.panel import Panel
-from ..common.utils import console
 from ..core.runner import Runner
 
 @click.command(
