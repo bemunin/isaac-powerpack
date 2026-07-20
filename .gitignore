@@ -58,3 +58,6 @@ coverage/
 
 #Claude
 .claude/
+
+#pow
+_isaacsim/
