@@ -16,6 +16,4 @@ raw_args = ["--/renderer/raytracingMotion/enabled=false"]
 name = "perf"
 extends = "default"
 cpu_performance_mode = true
-# Override the Isaac Sim ROS2 bridge distro (jazzy | humble) for this profile:
-# ros_bridge = "humble"
 # exts.add = ["your.custom.extension"]

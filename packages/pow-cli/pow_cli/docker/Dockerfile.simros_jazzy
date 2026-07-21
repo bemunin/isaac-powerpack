@@ -30,6 +30,14 @@ FROM osrf/ros:jazzy-desktop
 
 ENV ROS_DISTRO=jazzy
 
+# Ubuntu 24.04 base images ship a default 'ubuntu' user with UID/GID 1000,
+# which collides with the typical host UID mapped in at runtime: the
+# entrypoint would then reuse 'ubuntu' (HOME=/home/ubuntu) while the host
+# ~/.ros volume is mounted at /home/hostuser/.ros.  Remove it so the
+# entrypoint always creates 'hostuser' with the mapped host UID and all
+# /home/hostuser mounts line up.
+RUN userdel -r ubuntu 2>/dev/null || true
+
 # ── Step 2: FastDDS configuration ────────────────────────────────────────────
 # If the user has a custom ~/.ros/fastdds.xml on the host, they can mount it
 # at build time via:
@@ -74,6 +82,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-pip \
     ros-jazzy-vision-msgs \
     ros-jazzy-ackermann-msgs \
+    ros-jazzy-ros-testing \
     sudo \
     gosu \
     && rm -rf /var/lib/apt/lists/*
@@ -101,22 +110,31 @@ RUN CUDA_TAG="cu$(echo ${CUDA_VERSION} | tr -d '.')" && \
 WORKDIR /jazzy_ws
 
 # ── Step 5: Clone additional ROS packages ────────────────────────────────────
-RUN mkdir -p /jazzy_ws/src && \
-    git clone https://github.com/PickNikRobotics/topic_based_ros2_control.git \
-        /jazzy_ws/src/topic_based_ros2_control
+# Cloned into /opt/pow/extra_src (NOT /jazzy_ws — that path is shadowed by the
+# ros_ws bind mount at build time and by the host volume mount at runtime).
+# The entrypoint copies them into /jazzy_ws/src at container start when absent:
+# - topic_based_ros2_control: source-only dependency of isaac_moveit (no
+#   ros-jazzy-topic-based-ros2-control apt binary is published).
+# moveit_resources is NOT cloned: its packages (e.g.
+# moveit_resources_panda_moveit_config) are installed from the official apt
+# binaries via rosdep in Step 6.
+RUN mkdir -p /opt/pow/extra_src && \
+    git clone --depth 1 \
+        https://github.com/PickNikRobotics/topic_based_ros2_control.git \
+        /opt/pow/extra_src/topic_based_ros2_control
 
-# ── Step 6: Build workspace at image build time ──────────────────────────────
+# ── Step 6: Install workspace dependencies at image build time ───────────────
 # Uses a named build context 'ros_ws' pointing to the <distro>_ws folder.
+# /opt/pow/extra_src is included so keys like topic_based_ros2_control resolve
+# via --ignore-src and their own dependencies get installed.
 # Build with:
 #   docker build --build-context ros_ws=~/.pow/sim-ros/IsaacSim-ros_workspaces/jazzy_ws ...
-# install/ is persisted at /opt/jazzy_ws_install so the runtime volume mount
-# at /jazzy_ws does not shadow it.
 RUN --mount=type=bind,from=ros_ws,target=/jazzy_ws \
     bash -c "\
     source /opt/ros/jazzy/setup.sh && \
     cd /jazzy_ws && \
     apt-get update && \
-    rosdep install --from-paths src --ignore-src --rosdistro=jazzy -y -r \
+    rosdep install --from-paths src /opt/pow/extra_src --ignore-src --rosdistro=jazzy -y -r \
     "
 
 # ── Interactive shell environment ────────────────────────────────────────────
@@ -166,6 +184,53 @@ if [ -n "$HOST_UID" ] && [ -n "$HOST_GID" ]; then
     export HOME=$(getent passwd $HOST_UID | cut -d: -f6)
 else
     TARGET_USER="root"
+fi
+
+# ── Seed the per-user rosdep cache ────────────────────────────────────────
+# `rosdep update` ran as root at image build time (cache in /root/.ros).
+# The container drops to the mapped host user whose HOME starts empty, so
+# rosdep would error with "your rosdep installation has not been
+# initialized".  Copy the root cache once; when the host ~/.ros is volume-
+# mounted the seed persists across containers.
+if [ ! -d "$HOME/.ros/rosdep" ] && [ -d /root/.ros/rosdep ]; then
+    mkdir -p "$HOME/.ros"
+    cp -r /root/.ros/rosdep "$HOME/.ros/rosdep"
+    if [ -n "$HOST_UID" ] && [ -n "$HOST_GID" ]; then
+        # Own the parent .ros dir too — this script runs as root, and ROS 2
+        # logging needs to create $HOME/.ros/log as the runtime user.
+        chown "$HOST_UID:$HOST_GID" "$HOME/.ros"
+        chown -R "$HOST_UID:$HOST_GID" "$HOME/.ros/rosdep"
+    fi
+fi
+
+# ROS 2 logging writes to $HOME/.ros/log; make sure the runtime user can.
+if [ -n "$HOST_UID" ] && [ -n "$HOST_GID" ] && [ -d "$HOME/.ros" ]; then
+    if [ ! -w "$HOME/.ros" ] || [ "$(stat -c %u "$HOME/.ros")" != "$HOST_UID" ]; then
+        chown "$HOST_UID:$HOST_GID" "$HOME/.ros"
+    fi
+    mkdir -p "$HOME/.ros/log"
+    chown "$HOST_UID:$HOST_GID" "$HOME/.ros/log"
+fi
+
+# ── Seed extra source packages into the workspace ─────────────────────────
+# The mounted host workspace may lack source-only packages that were baked
+# into the image at /opt/pow/extra_src (see Dockerfile Step 5).  Copy them
+# in once; the workspace is a host volume so the seed persists.
+_seed_src() {
+    # $1 = source dir in /opt/pow/extra_src, $2 = destination dir
+    [ -d "$1" ] || return 0
+    if [ ! -d "$2" ] || [ -z "$(ls -A "$2" 2>/dev/null)" ]; then
+        echo "[pow_simros] Seeding $(basename "$1") into workspace src..."
+        rm -rf "$2"
+        cp -r "$1" "$2"
+        if [ -n "$HOST_UID" ] && [ -n "$HOST_GID" ]; then
+            chown -R "$HOST_UID:$HOST_GID" "$2"
+        fi
+    fi
+}
+if [ -d /jazzy_ws/src ]; then
+    _seed_src /opt/pow/extra_src/topic_based_ros2_control \
+              /jazzy_ws/src/topic_based_ros2_control
 fi
 
 # ── FastDDS configuration resolution ──────────────────────────────────────

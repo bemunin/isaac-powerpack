@@ -251,3 +251,4 @@ def test_start_new_container_uses_container_name(mocker):
     assert run_calls
     cmd = run_calls[0][0][0]
     assert cmd[cmd.index("--name") + 1] == "my_robot_sim"
+
