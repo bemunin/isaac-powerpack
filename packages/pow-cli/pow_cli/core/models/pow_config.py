@@ -29,6 +29,8 @@ class PowConfig:
     # ── ROS constants ────────────────────────────────────────────────────────
 
     ROS_DISTRO = "jazzy"
+    ROS_BRIDGE = "jazzy"
+    SUPPORTED_ROS_BRIDGES = ("humble", "jazzy")
 
     def __new__(cls):
         if cls._instance is None:
@@ -195,13 +197,38 @@ class PowConfig:
         return self.ROS_DISTRO
 
     @property
-    def ros_bridge_distro(self) -> str:
-        """ROS distro of the Isaac Sim internal ROS2 bridge, from host Ubuntu.
+    def ros_bridge(self) -> str:
+        """ROS distro of the Isaac Sim internal ROS2 bridge (default profile).
 
-        24.04 -> jazzy, otherwise humble (matches the libs shipped in
-        exts/isaacsim.ros2.bridge/).
+        Reads ``ros_bridge`` from pow.toml ``[sim]`` and selects which
+        prebuilt bridge libs under ``exts/isaacsim.ros2.bridge/<distro>/lib``
+        Isaac Sim loads. Defaults to ``"jazzy"`` when the key is missing or
+        pow.toml is not loaded. Use :meth:`get_ros_bridge` to resolve
+        the value for a specific profile.
         """
-        return "jazzy" if self.ubuntu_version == "24.04" else "humble"
+        return self.get_ros_bridge()
+
+    def get_ros_bridge(self, profile: str = "default") -> str:
+        """Resolve the ROS bridge distro for *profile*, validated.
+
+        Reads ``ros_bridge`` from the resolved *profile* (so a
+        ``[[profiles]]`` entry can override it), falling back to ``"jazzy"``
+        when the key is missing or pow.toml is not loaded. The value must be
+        one of :attr:`SUPPORTED_ROS_BRIDGES`.
+        """
+        try:
+            value = self.get(
+                "ros_bridge", self.ROS_BRIDGE, profile=profile
+            ) or self.ROS_BRIDGE
+        except RuntimeError:
+            value = self.ROS_BRIDGE
+        value = str(value).strip().lower()
+        if value not in self.SUPPORTED_ROS_BRIDGES:
+            raise click.ClickException(
+                f"Invalid ros_bridge '{value}' in pow.toml. "
+                f"Supported values: {', '.join(self.SUPPORTED_ROS_BRIDGES)}."
+            )
+        return value
 
     @property
     def ubuntu_version(self) -> str:

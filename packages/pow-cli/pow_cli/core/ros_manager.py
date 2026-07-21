@@ -31,13 +31,18 @@ class RosManager:
     # ── Environment preparation ──────────────────────────────────────────────
 
     @staticmethod
-    def isaacsim_bridge_env(config: PowConfig) -> dict[str, str]:
+    def isaacsim_bridge_env(config: PowConfig, profile: str = "default") -> dict[str, str]:
         """Env for launching Isaac Sim with its internal ROS2 bridge libs.
 
         Clears host ROS environment that conflicts with Isaac Sim's bundled
         Python, then points ``LD_LIBRARY_PATH`` at the prebuilt bridge libs
         shipped in ``exts/isaacsim.ros2.bridge/<distro>/lib``. The bridge
-        distro follows the host Ubuntu version (24.04 -> jazzy, else humble).
+        distro is read from ``ros_bridge`` in pow.toml (default
+        ``jazzy``), resolved for the given *profile*.
+
+        ``RMW_IMPLEMENTATION`` is inherited from the host environment when set,
+        falling back to ``rmw_fastrtps_cpp`` so the RMW picked here matches the
+        one used by ROS 2 nodes running outside Isaac Sim.
         """
         env = os.environ.copy()
 
@@ -60,7 +65,7 @@ class RosManager:
 
         isaacsim_version = config.get("version", PowConfig.ISAACSIM_VERSION)
         isaacsim_dir = config.global_path / "isaacsim" / isaacsim_version
-        bridge_distro = config.ros_bridge_distro
+        bridge_distro = config.get_ros_bridge(profile)
         bridge_lib = isaacsim_dir / "exts" / "isaacsim.ros2.bridge" / bridge_distro / "lib"
         if not bridge_lib.is_dir():
             raise click.ClickException(
@@ -71,7 +76,8 @@ class RosManager:
         ld_parts.append(str(bridge_lib))
         env["LD_LIBRARY_PATH"] = ":".join(ld_parts)
         env["ROS_DISTRO"] = bridge_distro
-        env["RMW_IMPLEMENTATION"] = "rmw_fastrtps_cpp"
+        # Inherit the host's RMW when set; default to Fast DDS otherwise.
+        env.setdefault("RMW_IMPLEMENTATION", "rmw_fastrtps_cpp")
         return env
 
     # ── Workspace setup (from Initializer) ───────────────────────────────────

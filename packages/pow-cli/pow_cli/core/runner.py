@@ -124,7 +124,7 @@ class Runner:
             raise click.ClickException("Unsupported platform. Only x86_64 is supported by Isaac Sim.")
 
         enable_ros = config.get("enable_ros", False, profile=profile)
-        source_env = RosManager.isaacsim_bridge_env(config) if enable_ros else os.environ.copy()
+        source_env = RosManager.isaacsim_bridge_env(config, profile=profile) if enable_ros else os.environ.copy()
 
         cmd = Runner.build_launch_command(config, profile, extra_args, open_path)
 
@@ -165,7 +165,7 @@ class Runner:
             )
 
         enable_ros = config.get("enable_ros", False, profile=profile)
-        source_env = RosManager.isaacsim_bridge_env(config) if enable_ros else os.environ.copy()
+        source_env = RosManager.isaacsim_bridge_env(config, profile=profile) if enable_ros else os.environ.copy()
 
         if config.get("cpu_performance_mode", False, profile=profile):
             console.print("[yellow]Setting CPU to performance mode (requires sudo)...[/yellow]")

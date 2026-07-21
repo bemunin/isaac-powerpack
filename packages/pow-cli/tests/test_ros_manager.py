@@ -5,7 +5,6 @@ import pytest
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from pow_cli.core.models.pow_config import PowConfig
 from pow_cli.core.ros_manager import RosManager
 
 
@@ -141,22 +140,22 @@ def _make_bridge_config(tmp_path, bridge_distro="humble", version="5.1.0"):
     """MagicMock PowConfig with an Isaac Sim install containing bridge libs."""
     cfg = MagicMock()
     cfg.global_path = tmp_path
-    cfg.ros_bridge_distro = bridge_distro
+    cfg.get_ros_bridge.return_value = bridge_distro
     cfg.get.return_value = version
     lib = tmp_path / "isaacsim" / version / "exts" / "isaacsim.ros2.bridge" / bridge_distro / "lib"
     lib.mkdir(parents=True)
     return cfg, lib
 
 
-def test_ros_bridge_distro_maps_ubuntu_version():
-    """Ubuntu 24.04 selects the jazzy bridge, anything else humble."""
-    get_distro = PowConfig.ros_bridge_distro.fget
-    assert get_distro is not None
-    fake_self = MagicMock()
-    fake_self.ubuntu_version = "24.04"
-    assert get_distro(fake_self) == "jazzy"
-    fake_self.ubuntu_version = "22.04"
-    assert get_distro(fake_self) == "humble"
+def test_isaacsim_bridge_env_uses_config_bridge_distro(tmp_path, mocker):
+    """The bridge distro is resolved from the config for the given profile."""
+    cfg, _ = _make_bridge_config(tmp_path, bridge_distro="humble")
+    mocker.patch.dict("os.environ", {}, clear=True)
+
+    env = RosManager.isaacsim_bridge_env(cfg, profile="perf")
+
+    cfg.get_ros_bridge.assert_called_once_with("perf")
+    assert env["ROS_DISTRO"] == "humble"
 
 
 def test_isaacsim_bridge_env_sets_bridge_variables(tmp_path, mocker):
@@ -167,8 +166,21 @@ def test_isaacsim_bridge_env_sets_bridge_variables(tmp_path, mocker):
     env = RosManager.isaacsim_bridge_env(cfg)
 
     assert env["ROS_DISTRO"] == "jazzy"
+    # No host RMW set → fall back to Fast DDS.
     assert env["RMW_IMPLEMENTATION"] == "rmw_fastrtps_cpp"
     assert env["LD_LIBRARY_PATH"].split(":")[-1] == str(lib)
+
+
+def test_isaacsim_bridge_env_inherits_host_rmw(tmp_path, mocker):
+    """RMW_IMPLEMENTATION set on the host is preserved, not overwritten."""
+    cfg, _ = _make_bridge_config(tmp_path, bridge_distro="jazzy")
+    mocker.patch.dict(
+        "os.environ", {"RMW_IMPLEMENTATION": "rmw_cyclonedds_cpp"}, clear=True
+    )
+
+    env = RosManager.isaacsim_bridge_env(cfg)
+
+    assert env["RMW_IMPLEMENTATION"] == "rmw_cyclonedds_cpp"
 
 
 def test_isaacsim_bridge_env_cleans_host_ros_environment(tmp_path, mocker):
@@ -204,7 +216,7 @@ def test_isaacsim_bridge_env_missing_libs_raises(tmp_path, mocker):
     """A missing bridge lib directory raises a ClickException."""
     cfg = MagicMock()
     cfg.global_path = tmp_path
-    cfg.ros_bridge_distro = "humble"
+    cfg.get_ros_bridge.return_value = "humble"
     cfg.get.return_value = "5.1.0"
     mocker.patch.dict("os.environ", {}, clear=True)
 

@@ -1,3 +1,4 @@
+import click
 import pytest
 from pow_cli.core.models.pow_config import PowConfig
 
@@ -309,6 +310,7 @@ def test_ros_defaults(tmp_path, monkeypatch, reset_config_singleton):
 
     assert config.ros_dockerfile == ""
     assert config.ros_docker_image == "pow_simros"
+    assert config.ros_bridge == "jazzy"
     # No custom dockerfile → base image name; container name derived from it
     assert config.ros_image_name == f"pow_simros_{config.ros_distro}"
     assert config.ros_container_name == f"pow_simros_{config.ros_distro}"
@@ -365,3 +367,39 @@ def test_ros_defaults_without_pow_toml(tmp_path, monkeypatch, reset_config_singl
 
     assert config.ros_dockerfile == ""
     assert config.ros_docker_image == "pow_simros"
+    assert config.ros_bridge == "jazzy"
+
+
+def test_ros_bridge_reads_flag(tmp_path, monkeypatch, reset_config_singleton):
+    """ros_bridge is read from [sim] and overridable per profile."""
+    content = """
+[sim]
+enable_ros = true
+ros_bridge = "humble"
+
+[[profiles]]
+name = "onjazzy"
+extends = "default"
+ros_bridge = "jazzy"
+"""
+    root = tmp_path / "project"
+    root.mkdir()
+    (root / "pow.toml").write_text(content)
+    monkeypatch.chdir(root)
+    config = PowConfig()
+
+    assert config.ros_bridge == "humble"
+    assert config.get_ros_bridge() == "humble"
+    assert config.get_ros_bridge("onjazzy") == "jazzy"
+
+
+def test_ros_bridge_invalid_raises(tmp_path, monkeypatch, reset_config_singleton):
+    """An unsupported ros_bridge value fails fast with a ClickException."""
+    root = tmp_path / "project"
+    root.mkdir()
+    (root / "pow.toml").write_text('[sim]\nros_bridge = "iron"\n')
+    monkeypatch.chdir(root)
+    config = PowConfig()
+
+    with pytest.raises(click.ClickException, match="Invalid ros_bridge"):
+        _ = config.ros_bridge

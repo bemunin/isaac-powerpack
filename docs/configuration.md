@@ -13,6 +13,7 @@ ext_folders = ["./exts"]
 cpu_performance_mode = false
 headless = false
 enable_ros = false
+ros_bridge = "jazzy"
 isaacsim_ros_ws = "~/IsaacSim-ros_workspaces"
 ros_dockerfile = ""
 ros_docker_image = "pow_simros"
@@ -29,6 +30,7 @@ raw_args = ["--/renderer/raytracingMotion/enabled=false"]
 | `cpu_performance_mode` | `bool`     | `false`                              | Enable CPU performance governor via `cpupower` (requires `sudo`). |
 | `headless`             | `bool`     | `false`                              | Run Isaac Sim without the GUI window. |
 | `enable_ros`           | `bool`     | `false`                              | Source the ROS 2 workspace environment before launching. |
+| `ros_bridge`    | `string`   | `"jazzy"`                            | ROS distro of the Isaac Sim internal ROS2 bridge libs to load (`jazzy` or `humble`). Selects which `exts/isaacsim.ros2.bridge/<distro>/lib` is added to `LD_LIBRARY_PATH` when `enable_ros = true`. Overridable per profile. |
 | `isaacsim_ros_ws`      | `string`   | `"~/IsaacSim-ros_workspaces"`        | Path to the cloned IsaacSim-ros_workspaces directory. |
 | `ros_dockerfile`       | `string`   | `""`                                 | Path (relative to project root) to a custom ROS Dockerfile built on top of the bundled `pow_simros_jazzy` base image. Empty = use the base image only. |
 | `ros_docker_image`     | `string`   | `"pow_simros"`                       | Docker image name for the ROS image launched by `pow ros` (the custom image tag when `ros_dockerfile` is set). The container name is derived from the image name (`/` and `:` replaced with `_`). |
@@ -174,6 +176,7 @@ ext_folders = ["./exts"]
 cpu_performance_mode = false
 headless = false
 enable_ros = false
+ros_bridge = "jazzy"
 isaacsim_ros_ws = "~/IsaacSim-ros_workspaces"
 ros_dockerfile = ""
 ros_docker_image = "pow_simros"

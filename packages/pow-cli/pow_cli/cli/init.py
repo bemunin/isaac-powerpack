@@ -308,10 +308,11 @@ def _step6_ros_integration(
     else:
         console.print(f"   [yellow]✔[/yellow] IsaacSim-ros_workspaces already available in [dim]{display_path}[/dim]")
 
-    bridge_distro = ros_mgr.config.ros_bridge_distro
+    bridge_distro = ros_mgr.config.ros_bridge
     console.print(
         f"   [green]✔[/green] ROS bridge: [bold]{bridge_distro}[/bold] "
-        f"(Ubuntu {ros_res['ubuntu_version']}) via Isaac Sim internal libs."
+        f"(ros_bridge in pow.toml, host Ubuntu {ros_res['ubuntu_version']}) "
+        f"via Isaac Sim internal libs."
     )
 
     # Build pow_simros Docker image
