@@ -3,6 +3,9 @@ import pytest
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import subprocess
+
+from pow_cli.core import runner as runner_module
 from pow_cli.core.runner import Runner
 
 @pytest.fixture
@@ -73,6 +76,143 @@ def test_run_isaacsim_calls_subprocess(mock_config, mocker):
     args, kwargs = mock_run.call_args
     assert "isaac-sim.sh" in args[0][0]
     assert kwargs.get("check") is True
+
+
+# ── CPU performance mode ────────────────────────────────────────────────────────
+
+@pytest.fixture
+def fake_cpufreq(tmp_path, monkeypatch):
+    """Point the governor lookup at a fake /sys tree."""
+    monkeypatch.setattr(runner_module, "CPU_DEVICES_PATH", tmp_path)
+
+    def set_governors(*governors: str) -> None:
+        for index, governor in enumerate(governors):
+            cpufreq = tmp_path / f"cpu{index}" / "cpufreq"
+            cpufreq.mkdir(parents=True)
+            (cpufreq / "scaling_governor").write_text(f"{governor}\n")
+
+    return set_governors
+
+
+@pytest.fixture
+def sudo_calls(mocker):
+    """Patch subprocess.run, recording argv and answering the sudo -n -v probe."""
+    calls: list[list[str]] = []
+    state = {"cached": False}
+
+    def fake_run(cmd, **kwargs):
+        calls.append(cmd)
+        result = MagicMock()
+        result.returncode = 0 if (cmd[:3] != ["sudo", "-n", "-v"] or state["cached"]) else 1
+        return result
+
+    mocker.patch("subprocess.run", side_effect=fake_run)
+    mocker.patch("shutil.which", return_value="/usr/bin/cpupower")
+    return calls, state
+
+
+CPUPOWER_CMD = ["sudo", "cpupower", "frequency-set", "-g", "performance"]
+
+
+def test_cpu_performance_mode_skipped_when_already_set(fake_cpufreq, sudo_calls, capsys):
+    """The whole point: no sudo process, so no password prompt on later runs."""
+    fake_cpufreq("performance", "performance")
+    calls, _ = sudo_calls
+
+    Runner.ensure_cpu_performance_mode()
+
+    assert calls == []
+    assert "already in performance mode" in capsys.readouterr().out
+
+
+def test_cpu_performance_mode_acts_when_only_some_cpus_are_set(fake_cpufreq, sudo_calls):
+    fake_cpufreq("performance", "powersave")
+    calls, _ = sudo_calls
+
+    Runner.ensure_cpu_performance_mode()
+
+    assert CPUPOWER_CMD in calls
+
+
+def test_cpu_performance_mode_is_quiet_when_sudo_is_cached(fake_cpufreq, sudo_calls, capsys):
+    fake_cpufreq("powersave")
+    calls, state = sudo_calls
+    state["cached"] = True
+
+    Runner.ensure_cpu_performance_mode()
+
+    assert calls == [["sudo", "-n", "-v"], CPUPOWER_CMD]
+    assert "requires sudo" not in capsys.readouterr().out
+
+
+def test_cpu_performance_mode_warns_before_prompting(fake_cpufreq, sudo_calls, capsys):
+    fake_cpufreq("powersave")
+    calls, _ = sudo_calls
+
+    Runner.ensure_cpu_performance_mode()
+
+    assert calls == [["sudo", "-n", "-v"], CPUPOWER_CMD]
+    assert "requires sudo" in capsys.readouterr().out
+
+
+def test_cpu_performance_mode_skipped_without_cpufreq(fake_cpufreq, sudo_calls, capsys):
+    calls, _ = sudo_calls  # no governor files written
+
+    Runner.ensure_cpu_performance_mode()
+
+    assert calls == []
+    assert "not available" in capsys.readouterr().out
+
+
+def test_cpu_performance_mode_skipped_without_cpupower(fake_cpufreq, sudo_calls, mocker, capsys):
+    fake_cpufreq("powersave")
+    calls, _ = sudo_calls
+    mocker.patch("shutil.which", return_value=None)
+
+    Runner.ensure_cpu_performance_mode()
+
+    assert calls == []
+    assert "cpupower not found" in capsys.readouterr().out
+
+
+def test_cpu_performance_mode_failure_does_not_raise(fake_cpufreq, mocker, capsys):
+    fake_cpufreq("powersave")
+    mocker.patch("shutil.which", return_value="/usr/bin/cpupower")
+
+    def fake_run(cmd, **kwargs):
+        if cmd == CPUPOWER_CMD:
+            raise subprocess.CalledProcessError(1, cmd)
+        result = MagicMock()
+        result.returncode = 0
+        return result
+
+    mocker.patch("subprocess.run", side_effect=fake_run)
+
+    Runner.ensure_cpu_performance_mode()
+
+    assert "Failed to set CPU performance mode" in capsys.readouterr().out
+
+
+def test_run_isaacsim_sets_performance_mode_for_perf_profile(mock_config, mocker):
+    mocker.patch("pathlib.Path.exists", return_value=True)
+    mocker.patch("platform.machine", return_value="x86_64")
+    mocker.patch("subprocess.run")
+    ensure = mocker.patch("pow_cli.core.runner.Runner.ensure_cpu_performance_mode")
+
+    Runner.run_isaacsim("perf")
+
+    ensure.assert_called_once_with()
+
+
+def test_run_isaacsim_leaves_cpu_alone_by_default(mock_config, mocker):
+    mocker.patch("pathlib.Path.exists", return_value=True)
+    mocker.patch("platform.machine", return_value="x86_64")
+    mocker.patch("subprocess.run")
+    ensure = mocker.patch("pow_cli.core.runner.Runner.ensure_cpu_performance_mode")
+
+    Runner.run_isaacsim("default")
+
+    ensure.assert_not_called()
 
 
 # ── run_sim (project-independent launcher) ──────────────────────────────────────

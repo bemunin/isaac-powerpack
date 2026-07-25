@@ -27,7 +27,7 @@ raw_args = ["--/renderer/raytracingMotion/enabled=false"]
 |:-----------------------|:-----------|:-------------------------------------|:------------|
 | `version`              | `string`   | `"5.1.0"`                            | Isaac Sim version to use. |
 | `ext_folders`          | `string[]` | `["./exts"]`                         | Directories to search for custom extensions. |
-| `cpu_performance_mode` | `bool`     | `false`                              | Enable CPU performance governor via `cpupower` (requires `sudo`). |
+| `cpu_performance_mode` | `bool`     | `false`                              | Enable CPU performance governor via `cpupower` (requires `sudo`). Skipped when the governor is already `performance`, so the password is normally asked once rather than on every launch — see the note below. |
 | `headless`             | `bool`     | `false`                              | Run Isaac Sim without the GUI window. |
 | `enable_ros`           | `bool`     | `false`                              | Source the ROS 2 workspace environment before launching. |
 | `ros_bridge`    | `string`   | `"jazzy"`                            | ROS distro of the Isaac Sim internal ROS2 bridge libs to load (`jazzy` or `humble`). Selects which `exts/isaacsim.ros2.bridge/<distro>/lib` is added to `LD_LIBRARY_PATH` when `enable_ros = true`. Overridable per profile. |
@@ -36,6 +36,16 @@ raw_args = ["--/renderer/raytracingMotion/enabled=false"]
 | `ros_docker_image`     | `string`   | `"pow_simros"`                       | Docker image name for the ROS image launched by `pow ros` (the custom image tag when `ros_dockerfile` is set). The container name is derived from the image name (`/` and `:` replaced with `_`). |
 | `exts`                 | `string[]` | `["isaacsim.code_editor.vscode"]`    | Extensions to enable on launch. |
 | `raw_args`             | `string[]` | `["--/renderer/raytracingMotion/enabled=false"]` | Extra CLI arguments passed directly to Isaac Sim. |
+
+> [!NOTE]
+> **When `cpu_performance_mode` asks for your password.** Before touching `cpupower`, pow reads `/sys/devices/system/cpu/cpu*/cpufreq/scaling_governor`. If every CPU is already on the `performance` governor it runs no `sudo` at all, so later launches never prompt. It also skips (instead of prompting pointlessly) when `cpupower` is not installed or the host has no cpufreq support.
+>
+> The governor persists until something changes it, so you are normally asked once per boot. On GNOME desktops, `power-profiles-daemon` owns the governor and re-applies it whenever the power profile changes (for example a laptop switching between AC and battery) — after that pow will ask again. To remove the prompt entirely, add a narrowly scoped drop-in:
+>
+> ```bash
+> echo "$USER ALL=(root) NOPASSWD: $(command -v cpupower)" | sudo tee /etc/sudoers.d/pow-cpupower
+> sudo chmod 0440 /etc/sudoers.d/pow-cpupower
+> ```
 
 ---
 

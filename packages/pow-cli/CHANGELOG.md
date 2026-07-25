@@ -26,6 +26,8 @@ All notable changes to the `pow-cli` package will be documented in this file.
 
 ### Fixed
 
+- **`cpu_performance_mode` asked for the sudo password on every launch** — `pow run` / `pow python` now read the current CPU governor from `/sys/devices/system/cpu/cpu*/cpufreq/scaling_governor` first and run no `sudo` at all when it is already `performance`, so the password is normally needed once instead of every launch. When sudo credentials are still cached the governor is set without the "requires sudo" notice, and hosts without `cpupower` or without cpufreq support now report and skip rather than prompting for a password to no purpose. The interactive prompt itself is unchanged when the governor really has to be switched
+
 - **`ros2` tab completion inside the `pow_simros` container** — the entrypoint sourced ROS before exec'ing bash, which carried environment variables but not bash completion functions. Interactive shells now re-source `/opt/ros/jazzy/setup.bash` and the workspace overlay via `/etc/bash.bashrc`, so `ros2` / `colcon` autocomplete works without manually sourcing `setup.bash` (requires rebuilding the image)
 
 ---

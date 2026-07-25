@@ -15,8 +15,66 @@ from .ros_manager import RosManager
 
 console = Console()
 
+CPU_DEVICES_PATH = Path("/sys/devices/system/cpu")
+
 class Runner:
     """Handles execution of Isaac Sim and related tools."""
+
+    @staticmethod
+    def _cpu_governors() -> set[str]:
+        """Scaling governor of every CPU; empty when cpufreq is unavailable.
+
+        The sysfs entries are world-readable, so this needs no privileges.
+        """
+        governors: set[str] = set()
+        for path in CPU_DEVICES_PATH.glob("cpu*/cpufreq/scaling_governor"):
+            try:
+                governors.add(path.read_text().strip())
+            except OSError:
+                continue
+        return governors
+
+    @staticmethod
+    def ensure_cpu_performance_mode() -> None:
+        """Put the CPU governor into performance mode, asking for sudo only if needed.
+
+        Every early return here is a password prompt avoided: the governor may
+        already be set from a previous run, cpufreq may not exist at all, or
+        ``cpupower`` may not be installed.  When the change really is needed the
+        prompt behaves exactly as it always has.
+        """
+        governors = Runner._cpu_governors()
+
+        if governors == {"performance"}:
+            console.print("[dim]CPU already in performance mode.[/dim]")
+            return
+
+        if not governors:
+            console.print(
+                "[dim]CPU frequency scaling not available, skipping performance mode.[/dim]"
+            )
+            return
+
+        if shutil.which("cpupower") is None:
+            console.print(
+                "[red]cpupower not found, skipping performance mode.[/red]\n"
+                "[dim]Install it with: sudo apt install linux-tools-common "
+                'linux-tools-$(uname -r)[/dim]'
+            )
+            return
+
+        # `sudo -v` only validates cached credentials - it runs no command and is
+        # silent on success - and `-n` keeps it from ever prompting.  A non-zero
+        # exit means the password has not been entered recently, so that is the
+        # only case where the notice below is worth printing.
+        cached = subprocess.run(["sudo", "-n", "-v"], capture_output=True).returncode == 0
+        if not cached:
+            console.print("[yellow]Setting CPU to performance mode (requires sudo)...[/yellow]")
+
+        try:
+            subprocess.run(["sudo", "cpupower", "frequency-set", "-g", "performance"], check=True)
+        except subprocess.CalledProcessError as e:
+            console.print(f"[red]Failed to set CPU performance mode: {e}[/red]")
 
     @staticmethod
     def check_compatibility() -> dict:
@@ -129,11 +187,7 @@ class Runner:
         cmd = Runner.build_launch_command(config, profile, extra_args, open_path)
 
         if config.get("cpu_performance_mode", False, profile=profile):
-            console.print("[yellow]Setting CPU to performance mode (requires sudo)...[/yellow]")
-            try:
-                subprocess.run(["sudo", "cpupower", "frequency-set", "-g", "performance"], check=True)
-            except subprocess.CalledProcessError as e:
-                console.print(f"[red]Failed to set CPU performance mode: {e}[/red]")
+            Runner.ensure_cpu_performance_mode()
 
         console.print(f"[blue]Running: {' '.join(shlex.quote(c) for c in cmd)}[/blue]")
         
@@ -218,11 +272,7 @@ class Runner:
         source_env = RosManager.isaacsim_bridge_env(config, profile=profile) if enable_ros else os.environ.copy()
 
         if config.get("cpu_performance_mode", False, profile=profile):
-            console.print("[yellow]Setting CPU to performance mode (requires sudo)...[/yellow]")
-            try:
-                subprocess.run(["sudo", "cpupower", "frequency-set", "-g", "performance"], check=True)
-            except subprocess.CalledProcessError as e:
-                console.print(f"[red]Failed to set CPU performance mode: {e}[/red]")
+            Runner.ensure_cpu_performance_mode()
 
         cmd = [str(python_script)]
         if extra_args:
