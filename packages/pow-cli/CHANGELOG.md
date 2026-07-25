@@ -13,6 +13,7 @@ All notable changes to the `pow-cli` package will be documented in this file.
   - `pow ros` launches the custom image when configured, otherwise falls back to the base image
 - **`pow ros build`** — build the custom image from `ros_dockerfile` without re-running `pow init`; builds the `pow_simros_jazzy` base image first if it is missing, and supports `--no-cache`. `pow ros` is now a command group (bare `pow ros [args...]` usage is unchanged; `pow ros launch` is the explicit form)
 - **Version flag (`pow --version` / `pow -v`)** — quickly check the installed `pow-cli` version from the command line
+- **Tab completion for the `pow init` ROS workspace path** — step 6's "Path to clone IsaacSim-ros_workspaces" prompt now completes filesystem paths on <kbd>Tab</kbd> like a shell: unique directories complete inline (no stray trailing space, so the next segment can be typed straight away), ambiguous prefixes list candidates, and `~` is kept in the stored path. Trailing separators and whitespace are trimmed before the value is written to `pow.toml`
 - **`pow sim`** — run Isaac Sim from any directory, with no project required: no `pyproject.toml` check and `pow.toml` is never read. Launches the default version (`5.1.0`, override with `-v/--version`) and forwards raw arguments straight to `isaac-sim.sh` (`pow sim -- --no-window`). The ROS 2 bridge environment is loaded by default (`--ros jazzy`); pass `--no-ros` to launch with the inherited environment instead
 
 ### Changed

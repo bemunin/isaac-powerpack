@@ -13,7 +13,7 @@ This interactive command walks through a 10-step setup:
 3. Creates the `.pow` global folder if it's not exists
 4. Downloads and installs your specified Isaac Sim version in `.pow/isaacsim/<version>` folder
 5. Applies post-install optimizations
-6. Sets up ROS integration (optional — builds Docker images)
+6. Sets up ROS integration (optional — builds Docker images). The workspace path prompt supports shell-style <kbd>Tab</kbd> completion: unique directories complete inline, ambiguous prefixes list candidates, and `~` is preserved
 7. Creates project structure (`exts/`, `.modules/`, `usda/`)
 8. Symlinks the managed Isaac Sim installation into the project for intellisense/code completion
 9. Configures VS Code settings

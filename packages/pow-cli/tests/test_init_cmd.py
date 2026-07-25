@@ -78,7 +78,7 @@ class TestInitCmd:
         self.mock_create_global.return_value = {"global_existed": True, "results": []}
         mocker.patch("pow_cli.cli.init.Confirm.ask", return_value=True)
         mocker.patch(
-            "pow_cli.cli.init.Prompt.ask", return_value="~/IsaacSim-ros_workspaces"
+            "pow_cli.cli.init.ask_path", return_value="~/IsaacSim-ros_workspaces"
         )
         mocker.patch(
             "pow_cli.core.ros_manager.RosManager.build_simros_image",

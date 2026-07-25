@@ -6,8 +6,9 @@ from pathlib import Path
 import click
 from rich.panel import Panel
 from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
-from rich.prompt import Confirm, Prompt
+from rich.prompt import Confirm
 
+from ..common.prompt import ask_path
 from ..common.utils import console
 from ..core.initializer import Initializer
 from ..core.ros_manager import RosManager
@@ -258,7 +259,7 @@ def _step6_ros_integration(
         ws_path = forced_ws
         console.print(f"   Using existing workspace path from pow.toml: [bold green]{ws_path}[/bold green]")
     else:
-        ws_path = Prompt.ask(
+        ws_path = ask_path(
             "   Path to clone IsaacSim-ros_workspaces",
             default=default_ws,
         )
