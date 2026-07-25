@@ -53,6 +53,42 @@ pow run -- --/renderer/enabled=gpu
 
 ---
 
+## `pow sim`
+
+Run Isaac Sim from **any** directory. Unlike `pow run`, this command needs no project: it does not require a `pyproject.toml` and never reads `pow.toml`, so there is no profile, no `ext_folders`, and no `exts`. It simply launches `.pow/isaacsim/<version>/isaac-sim.sh` and forwards every unrecognized argument straight to it.
+
+Use it to open Isaac Sim outside a project — inspecting a stray USD file, or sanity-checking the installation.
+
+```bash
+# Launch the default version (5.1.0) with the jazzy ROS 2 bridge
+pow sim
+
+# Launch without the ROS 2 bridge environment
+pow sim --no-ros
+
+# Use the humble bridge instead
+pow sim --ros humble
+
+# Launch a different installed version
+pow sim -v 5.0.0
+
+# Pass raw arguments directly to Isaac Sim
+pow sim -- --no-window --/renderer/enabled=gpu
+```
+
+| Option              | Description                                                  |
+| :------------------ | :----------------------------------------------------------- |
+| `-v`, `--version`   | Isaac Sim version to run (default: `5.1.0`)                  |
+| `--ros`             | ROS 2 bridge distro: `jazzy` (default) or `humble`           |
+| `--no-ros`          | Launch without the ROS 2 bridge environment; wins over `--ros` |
+
+> [!NOTE]
+> Because the ROS 2 bridge is enabled by default, `pow sim` clears the host ROS environment and points `LD_LIBRARY_PATH` at Isaac Sim's bundled bridge libs — the same environment `pow run` builds when `enable_ros = true`. Pass `--no-ros` to inherit your shell environment untouched.
+>
+> `-v` on this subcommand selects the Isaac Sim version; `pow -v` (on the root command) still prints the pow CLI version.
+
+---
+
 ## `pow python`
 
 Run Isaac Sim's bundled Python interpreter (`.pow/isaacsim/<version>/python.sh`)for running standalone isaac sim application.

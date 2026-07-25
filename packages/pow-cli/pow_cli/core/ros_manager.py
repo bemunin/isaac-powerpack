@@ -44,6 +44,19 @@ class RosManager:
         falling back to ``rmw_fastrtps_cpp`` so the RMW picked here matches the
         one used by ROS 2 nodes running outside Isaac Sim.
         """
+        isaacsim_version = config.get("version", PowConfig.ISAACSIM_VERSION)
+        isaacsim_dir = config.global_path / "isaacsim" / isaacsim_version
+        bridge_distro = config.get_ros_bridge(profile)
+        return RosManager.bridge_env(isaacsim_dir, bridge_distro)
+
+    @staticmethod
+    def bridge_env(isaacsim_dir: Path, bridge_distro: str) -> dict[str, str]:
+        """Config-free variant of :meth:`isaacsim_bridge_env`.
+
+        Takes the resolved Isaac Sim install directory and bridge distro
+        directly, so callers that must not read pow.toml (``pow sim``) can build
+        the same environment.
+        """
         env = os.environ.copy()
 
         for var in (
@@ -63,9 +76,6 @@ class RosManager:
             if p and not p.startswith("/opt/ros/")
         ]
 
-        isaacsim_version = config.get("version", PowConfig.ISAACSIM_VERSION)
-        isaacsim_dir = config.global_path / "isaacsim" / isaacsim_version
-        bridge_distro = config.get_ros_bridge(profile)
         bridge_lib = isaacsim_dir / "exts" / "isaacsim.ros2.bridge" / bridge_distro / "lib"
         if not bridge_lib.is_dir():
             raise click.ClickException(

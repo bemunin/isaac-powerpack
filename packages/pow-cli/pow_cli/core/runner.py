@@ -145,6 +145,56 @@ class Runner:
             console.print("[yellow]Isaac Sim launch aborted by user.[/yellow]")
 
     @staticmethod
+    def run_sim(
+        version: str = PowConfig.ISAACSIM_VERSION,
+        ros_bridge: str | None = PowConfig.ROS_BRIDGE,
+        extra_args: list[str] | None = None,
+    ) -> None:
+        """Run Isaac Sim from any directory, independent of any project.
+
+        Unlike :meth:`run_isaacsim` this reads no pow.toml and requires no
+        pyproject.toml, so it works outside a pow project.  Only the global
+        directory name is looked up (see :meth:`PowConfig.resolve_global_path`);
+        every Isaac Sim argument comes from *extra_args*.
+
+        Args:
+            version: Isaac Sim version under ``<global_path>/isaacsim/``.
+            ros_bridge: ROS 2 bridge distro to load, or ``None`` to launch with
+                the inherited environment and no bridge.
+            extra_args: Arguments forwarded verbatim to ``isaac-sim.sh``.
+        """
+        if platform.machine().lower() not in ("x86_64", "amd64"):
+            raise click.ClickException("Unsupported platform. Only x86_64 is supported by Isaac Sim.")
+
+        isaacsim_dir = PowConfig.resolve_global_path() / "isaacsim" / version
+        launch_script = isaacsim_dir / "isaac-sim.sh"
+
+        if not launch_script.exists():
+            raise click.ClickException(
+                f"Isaac Sim not found at {launch_script}\n"
+                "Run 'pow init' first to install Isaac Sim."
+            )
+
+        source_env = (
+            RosManager.bridge_env(isaacsim_dir, ros_bridge)
+            if ros_bridge
+            else os.environ.copy()
+        )
+
+        cmd = [str(launch_script)]
+        if extra_args:
+            cmd.extend(extra_args)
+
+        console.print(f"[blue]Running: {' '.join(shlex.quote(c) for c in cmd)}[/blue]")
+
+        try:
+            subprocess.run(cmd, check=True, env=source_env)
+        except subprocess.CalledProcessError as e:
+            raise click.ClickException(f"Isaac Sim process failed with exit code {e.returncode}")
+        except KeyboardInterrupt:
+            console.print("[yellow]Isaac Sim launch aborted by user.[/yellow]")
+
+    @staticmethod
     def run_python(profile: str = "default", extra_args: list[str] | None = None) -> None:
         """Run the Isaac Sim bundled Python interpreter.
 

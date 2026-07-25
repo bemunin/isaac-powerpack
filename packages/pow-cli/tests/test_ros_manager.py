@@ -224,6 +224,20 @@ def test_isaacsim_bridge_env_missing_libs_raises(tmp_path, mocker):
         RosManager.isaacsim_bridge_env(cfg)
 
 
+def test_bridge_env_takes_dir_and_distro_without_config(tmp_path, mocker):
+    """`pow sim` builds the same env from an install dir, with no PowConfig."""
+    isaacsim_dir = tmp_path / "isaacsim" / "5.1.0"
+    lib = isaacsim_dir / "exts" / "isaacsim.ros2.bridge" / "jazzy" / "lib"
+    lib.mkdir(parents=True)
+    mocker.patch.dict("os.environ", {"LD_LIBRARY_PATH": "/opt/ros/jazzy/lib"}, clear=True)
+
+    env = RosManager.bridge_env(isaacsim_dir, "jazzy")
+
+    assert env["ROS_DISTRO"] == "jazzy"
+    assert env["RMW_IMPLEMENTATION"] == "rmw_fastrtps_cpp"
+    assert env["LD_LIBRARY_PATH"] == str(lib)
+
+
 # ── container launching uses ros_container_name ─────────────────────────────────
 
 def test_start_new_container_uses_container_name(mocker):

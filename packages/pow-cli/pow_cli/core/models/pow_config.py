@@ -78,6 +78,16 @@ class PowConfig:
 
         return ".pow"
 
+    @classmethod
+    def resolve_global_path(cls) -> Path:
+        """Absolute path to the global pow directory, without loading pow.toml.
+
+        Honors ``[tool.pow-cli] global_dir_name`` from a pyproject.toml above
+        cwd when present, otherwise ``~/.pow``.  Used by ``pow sim``, which must
+        work in directories that are not pow projects.
+        """
+        return Path.home() / cls._read_global_dir_name()
+
     def _find_project_root(self, start_path: Optional[Path] = None) -> Optional[Path]:
         """Find the project root by locating pow.toml."""
         if start_path is None:
