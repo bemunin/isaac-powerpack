@@ -172,6 +172,8 @@ sim-project/
 
 See [Contribution Guide](docs/contributing.md)
 
+Maintainers publishing a new version: see the [Release Guide](docs/releasing.md).
+
 ## License
 
 [Apache-2.0](LICENSE).
