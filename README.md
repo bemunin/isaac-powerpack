@@ -27,7 +27,47 @@ Pow CLI requires uv and Docker (for ROS 2 container support). Ensure both are in
 - [uv Installation Guide](https://docs.astral.sh/uv/)
 - [Docker Installation Guide](https://docs.docker.com/get-docker/)
 
-Setup your project
+### User-level install
+
+Install `pow` once for your user and run it from any directory — no project needed:
+
+```bash
+# install pow cli as a user-level tool
+uv tool install pow-cli==0.2.0
+
+# add uv's tool directory to your PATH (once, then restart your shell)
+uv tool update-shell
+```
+
+`pow` is now available everywhere — for example, run Isaac Sim from any directory
+with no project required:
+
+```bash
+pow sim
+```
+
+Manage the installation with:
+
+```bash
+# show the installed version
+uv tool list
+
+# move to the latest release
+uv tool install pow-cli@latest --force
+
+# remove it
+uv tool uninstall pow-cli
+```
+
+> [!NOTE]
+> Installing with an exact pin (`==0.2.0`) means `uv tool upgrade pow-cli` reports
+> *"Nothing to upgrade"*. Use `uv tool install pow-cli@latest --force` to move to a
+> newer version.
+
+### Project install
+
+Project commands such as `pow init` operate on a project folder. Add Pow CLI as a
+project dependency so the version is pinned in your `pyproject.toml`:
 
 ```bash
 # create your project folder
@@ -36,16 +76,10 @@ mkdir sim-project && cd sim-project
 # create pyproject.toml and initialize uv
 uv init --bare
 
-# add pow cli package
-uv add pow-cli
-
 # Initialize project, install isaac sim, setup ROS, create config file
-uv run pow init
+pow init
 
-# source your workspace
-source .venv/bin/activate
 ```
-
 
 ### Usages
 
@@ -160,7 +194,7 @@ sim-project/
 | Platform              | Version / Notes              |
 | :-------------------- | :--------------------------- |
 | OS                    | Ubuntu 22.04 / 24.04         |
-| ROS2                  | Jazzy                        |
+| ROS2 Docker           | Jazzy                        |
 | Isaac Sim             | `5.1.0`                      |
 
 > [!NOTE]
