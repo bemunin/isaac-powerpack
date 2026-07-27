@@ -1,6 +1,6 @@
 [project]
 name = "isaac-powerpack"
-version = "0.2.0rc1"
+version = "0.2.0rc2"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.11,<3.12"

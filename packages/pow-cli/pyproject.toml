@@ -1,6 +1,6 @@
 [project]
 name = "pow-cli"
-version = "0.2.0rc1"
+version = "0.2.0rc2"
 description = "Command line interface for Isaac Powerpack"
 readme = "README.md"
 requires-python = ">=3.10"
