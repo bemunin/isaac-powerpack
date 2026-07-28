@@ -7,8 +7,8 @@
 
 Updates packages/pow-cli/pyproject.toml, the workspace root pyproject.toml (kept
 in lockstep), and uv.lock. Touches nothing else -- no commit, no tag, no push.
-Review the diff, write the CHANGELOG entry, and commit yourself, then run
-release.py to build and tag.
+Review the diff, write the CHANGELOG entry, commit, then tag and push; publishing
+happens when the GitHub release is created (see docs/releasing.md).
 
     uv run bump.py --bump patch
     uv run bump.py --bump minor --bump rc
@@ -173,8 +173,9 @@ def main() -> None:
     say(
         f"\nNothing committed. Next:\n"
         f"  1. add the {new_version} entry to {CHANGELOG}\n"
-        f"  2. git commit -m 'chore: bump version to v{new_version}'\n"
-        f"  3. uv run release.py\n"
+        f"  2. git commit -m 'chore: bump to {new_version}'\n"
+        f"  3. git tag -a v{new_version} -m 'pow-cli {new_version}', push branch and tag\n"
+        f"  4. create the GitHub release from v{new_version} to publish\n"
         f"To undo:\n"
         f"  git checkout -- {' '.join(VERSIONED_FILES)}"
     )

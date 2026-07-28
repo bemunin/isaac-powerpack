@@ -1,43 +1,32 @@
 name: Publish
 
-# Push a PEP 440 tag (e.g. v0.2.0rc1, v0.2.0) to release.
-# The tag must match `version` in packages/pow-cli/pyproject.toml exactly.
+# Publishing a GitHub release (done manually in the web UI) uploads pow-cli to
+# TestPyPI automatically, then to PyPI once the `pypi` environment's required
+# reviewer approves. Both indexes use Trusted Publishing (OIDC) — no tokens.
 #
-# TestPyPI publishes automatically; PyPI waits on the `pypi` environment's
-# required reviewers. Both indexes use Trusted Publishing (OIDC) — no tokens.
+# The release tag must be canonical PEP 440 with a leading `v` (e.g. v0.2.0rc1,
+# v0.2.0) and match `version` in packages/pow-cli/pyproject.toml exactly.
+#
+# Actions are pinned to commit SHAs so a repointed upstream tag cannot change
+# what runs here. Refresh the SHAs when bumping versions.
+
 on:
-  push:
-    tags:
-      - "v*"
+  release:
+    types: [published]
 
 permissions:
   contents: read
 
 jobs:
   build:
+    # Only this repo (never a fork) and only the maintainer may publish.
+    # actor = who published the release; triggering_actor = who re-ran the run.
+    if: >-
+      github.repository == 'isaac-powerpack/pow' &&
+      github.actor == 'bemunin' &&
+      github.triggering_actor == 'bemunin'
     runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.guard.outputs.version }}
     steps:
-      # Runs before checkout so an unauthorized tag push does nothing at all.
-      # `actor` is who pushed the tag; `triggering_actor` is who re-ran the
-      # workflow, if it was re-run. Both must be the maintainer.
-      - name: Authorize releaser
-        env:
-          RELEASER: bemunin
-          ACTOR: ${{ github.actor }}
-          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
-        run: |
-          for who in "$ACTOR" "$TRIGGERING_ACTOR"; do
-            if [ "${who,,}" != "$RELEASER" ]; then
-              echo "::error::Only $RELEASER may publish pow-cli (got '$who')."
-              exit 1
-            fi
-          done
-          echo "Release authorized for $ACTOR"
-
-      # Actions are pinned to commit SHAs so a repointed upstream tag cannot
-      # change what runs in this workflow. Refresh the SHAs when bumping.
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           # Nothing after checkout needs the token; keep it out of .git/config
@@ -48,25 +37,22 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Check tag against pyproject version
-        id: guard
+      - name: Check release tag against pyproject version
         env:
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ github.event.release.tag_name }}
         run: |
           python3 - <<'PY'
           import os, re, sys, tomllib
 
           tag = os.environ["TAG"]
-          if not tag.startswith("v"):
-              sys.exit(f"::error::Tag {tag!r} must start with 'v'.")
-          version = tag[1:]
-
-          # Canonical PEP 440: 1.2.3, 1.2.3a1, 1.2.3b2, 1.2.3rc1.
-          if not re.fullmatch(r"\d+\.\d+\.\d+(?:(?:a|b|rc)\d+)?", version):
+          # Canonical PEP 440 after the `v`: 1.2.3, 1.2.3a1, 1.2.3b2, 1.2.3rc1.
+          m = re.fullmatch(r"v(\d+\.\d+\.\d+(?:(?:a|b|rc)\d+)?)", tag)
+          if not m:
               sys.exit(
-                  f"::error::Tag {tag!r} is not a PEP 440 version. "
-                  "Use vX.Y.Z or vX.Y.Z{a,b,rc}N (e.g. v0.2.0rc1, not v0.2.0-rc.1)."
+                  f"::error::Tag {tag!r} is not vX.Y.Z or vX.Y.Z{{a,b,rc}}N "
+                  "(e.g. v0.2.0rc1, not v0.2.0-rc.1)."
               )
+          version = m.group(1)
 
           def project_version(path):
               with open(path, "rb") as f:
@@ -85,8 +71,6 @@ jobs:
           if root != version:
               print(f"::warning::Root pyproject.toml is {root}, expected {version}.")
 
-          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
-              f.write(f"version={version}\n")
           print(f"Releasing pow-cli {version}")
           PY
 
@@ -102,9 +86,9 @@ jobs:
           path: dist/
           if-no-files-found: error
 
-  # Publishes the artifacts built above, unchanged, so both indexes get
-  # byte-identical files.
-  publish-testpypi:
+  # Both publish jobs upload the artifacts built above, unchanged, so the two
+  # indexes get byte-identical files.
+  testpypi:
     needs: build
     runs-on: ubuntu-latest
     environment: testpypi
@@ -123,8 +107,8 @@ jobs:
           # block the PyPI job.
           skip-existing: true
 
-  publish-pypi:
-    needs: publish-testpypi
+  pypi:
+    needs: testpypi
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
