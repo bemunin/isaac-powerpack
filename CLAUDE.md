@@ -3,6 +3,13 @@
 CLI tool (`pow`) for managing Isaac Sim projects with ROS 2 integration.
 Main package: `packages/pow-cli`.
 
+## Commit attribution
+
+`bemunin` is the sole author of this repository. Never add a
+`Co-Authored-By: Claude ...` trailer, a "Generated with Claude Code" footer, or
+any other Claude/Anthropic attribution to a commit message or PR body — GitHub
+counts co-author trailers toward the repo's contributor list.
+
 ## Releasing
 
 Two spellings of the same version are in play, and mixing them up breaks the
