@@ -2,7 +2,7 @@
 
 All notable changes to the `pow-cli` package will be documented in this file.
 
-## [0.2.0rc2] - 2026-07-28
+## [0.2.0-rc.2] - 2026-07-28
 
 ### Added
 

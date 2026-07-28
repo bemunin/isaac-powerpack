@@ -4,8 +4,9 @@ name: Publish
 # TestPyPI automatically, then to PyPI once the `pypi` environment's required
 # reviewer approves. Both indexes use Trusted Publishing (OIDC) — no tokens.
 #
-# The release tag must be canonical PEP 440 with a leading `v` (e.g. v0.2.0rc1,
-# v0.2.0) and match `version` in packages/pow-cli/pyproject.toml exactly.
+# The release tag is SemVer with a leading `v` (e.g. v0.2.0-rc.1, v0.2.0) and must
+# match `version` in packages/pow-cli/pyproject.toml once normalized to PEP 440
+# (v0.2.0-rc.1 -> 0.2.0rc1), which is the form uv and PyPI require.
 #
 # Actions are pinned to commit SHAs so a repointed upstream tag cannot change
 # what runs here. Refresh the SHAs when bumping versions.
@@ -45,14 +46,20 @@ jobs:
           import os, re, sys, tomllib
 
           tag = os.environ["TAG"]
-          # Canonical PEP 440 after the `v`: 1.2.3, 1.2.3a1, 1.2.3b2, 1.2.3rc1.
-          m = re.fullmatch(r"v(\d+\.\d+\.\d+(?:(?:a|b|rc)\d+)?)", tag)
+          # Tags are SemVer 2.0.0: v1.2.3, v1.2.3-rc.1, v1.2.3-a.2, v1.2.3-b.1.
+          # The older canonical PEP 440 spelling (v1.2.3rc1) is still accepted so
+          # tags already in this repo keep working.
+          m = re.fullmatch(r"v(\d+\.\d+\.\d+)(?:-?(a|b|rc)\.?(\d+))?", tag)
           if not m:
               sys.exit(
-                  f"::error::Tag {tag!r} is not vX.Y.Z or vX.Y.Z{{a,b,rc}}N "
-                  "(e.g. v0.2.0rc1, not v0.2.0-rc.1)."
+                  f"::error::Tag {tag!r} is not vX.Y.Z or vX.Y.Z-{{a,b,rc}}.N "
+                  "(e.g. v0.2.0-rc.1)."
               )
-          version = m.group(1)
+
+          # pyproject.toml, the built artifact, and PyPI all use the canonical
+          # PEP 440 form, so normalize the tag before comparing: 0.2.0-rc.1 -> 0.2.0rc1.
+          base, pre, num = m.groups()
+          version = base + (f"{pre}{num}" if pre else "")
 
           def project_version(path):
               with open(path, "rb") as f:

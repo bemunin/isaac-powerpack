@@ -72,15 +72,26 @@ def project_version(path: Path) -> str:
         return tomllib.load(f)["project"]["version"]
 
 
+def semver(version: str) -> str:
+    """Canonical PEP 440 -> SemVer: 0.2.0rc1 -> 0.2.0-rc.1.
+
+    pyproject.toml holds the PEP 440 form because uv and PyPI normalize to it;
+    tags, the GitHub release title, and CHANGELOG headings use SemVer.
+    """
+    return re.sub(r"(a|b|rc)(\d+)$", r"-\1.\2", version)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="uv run bump.py",
         description="Bump the pow-cli version in both pyproject.toml files and uv.lock.",
         epilog=(
-            "The resulting version must be canonical PEP 440 -- X.Y.Z optionally "
-            "followed by aN, bN, or rcN. .post and .dev releases are rejected "
-            "because the publish workflow refuses to build them. Nothing is "
-            "committed; that is yours to do."
+            "The version written to pyproject.toml is canonical PEP 440 -- X.Y.Z "
+            "optionally followed by aN, bN, or rcN -- because uv and PyPI "
+            "normalize to that form. The git tag and CHANGELOG heading use the "
+            "SemVer spelling instead (0.3.0rc1 -> 0.3.0-rc.1). .post and .dev "
+            "releases are rejected because the publish workflow refuses to build "
+            "them. Nothing is committed; that is yours to do."
         ),
     )
     parser.add_argument(
@@ -167,15 +178,19 @@ def main() -> None:
     for path in VERSIONED_FILES:
         say(f"  {path}")
 
-    if f"[{new_version}]" not in CHANGELOG.read_text():
-        say(f"\nwarning: no '[{new_version}]' heading in {CHANGELOG}")
+    # Tags and CHANGELOG headings use the SemVer spelling of the same version.
+    tag_version = semver(new_version)
+
+    if f"[{tag_version}]" not in CHANGELOG.read_text():
+        say(f"\nwarning: no '[{tag_version}]' heading in {CHANGELOG}")
 
     say(
         f"\nNothing committed. Next:\n"
-        f"  1. add the {new_version} entry to {CHANGELOG}\n"
-        f"  2. git commit -m 'chore: bump to {new_version}'\n"
-        f"  3. git tag -a v{new_version} -m 'pow-cli {new_version}', push branch and tag\n"
-        f"  4. create the GitHub release from v{new_version} to publish\n"
+        f"  1. add the [{tag_version}] entry to {CHANGELOG}\n"
+        f"  2. git commit -m 'chore: bump to {tag_version}'\n"
+        f"  3. git tag -a v{tag_version} -m 'pow-cli {tag_version}', push branch and tag\n"
+        f"  4. gh release create v{tag_version} --title 'pow@{tag_version}'"
+        f"{' --prerelease' if tag_version != new_version else ''} --notes ...\n"
         f"To undo:\n"
         f"  git checkout -- {' '.join(VERSIONED_FILES)}"
     )

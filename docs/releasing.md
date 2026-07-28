@@ -20,20 +20,28 @@ and add them as a reviewer on the `pypi` environment. Note this guard lives in t
 workflow file, so anyone with write access to the repo could edit it — see the
 ruleset suggestion under [One-time setup](#one-time-setup) to close that off.
 
-## Tag format
+## Version format
 
-Tags are **PEP 440** and must match `version` in `packages/pow-cli/pyproject.toml`
-exactly, minus the leading `v`:
+Every release has **two spellings of the same version**, and they are not
+interchangeable:
 
-| Release      | Version in `pyproject.toml` | Tag         |
-| ------------ | --------------------------- | ----------- |
-| Stable       | `0.2.0`                     | `v0.2.0`    |
-| Release cand.| `0.2.0rc1`                  | `v0.2.0rc1` |
-| Beta         | `0.2.0b1`                   | `v0.2.0b1`  |
-| Alpha        | `0.2.0a1`                   | `v0.2.0a1`  |
+| Release      | `pyproject.toml` / PyPI (PEP 440) | Tag, release title, CHANGELOG (SemVer) |
+| ------------ | --------------------------------- | -------------------------------------- |
+| Stable       | `0.2.0`                           | `v0.2.0`                               |
+| Release cand.| `0.2.0rc1`                        | `v0.2.0-rc.1`                          |
+| Beta         | `0.2.0b1`                         | `v0.2.0-b.1`                           |
+| Alpha        | `0.2.0a1`                         | `v0.2.0-a.1`                           |
 
-SemVer-style tags such as `v0.2.0-rc.1` are rejected by the workflow. Some older tags
-in this repo use that style; they are history and are not re-tagged.
+Tags follow **[SemVer 2.0.0](https://semver.org/)** — pre-releases use the `-`
+suffix. `pyproject.toml` cannot: `uv version` normalizes `0.2.0-rc.1` to `0.2.0rc1`
+on write, and PyPI stores and serves only that canonical
+[PEP 440](https://peps.python.org/pep-0440/) form, so the published artifact is
+always `pow_cli-0.2.0rc1-…` no matter how the tag is spelled.
+
+The publish workflow bridges the two: it parses the release tag and normalizes it
+to PEP 440 before comparing against `packages/pow-cli/pyproject.toml`. The older
+canonical tag spelling (`v0.2.0rc1`) is still accepted so tags already in this
+repo keep working, but new releases should use the SemVer form.
 
 ## Steps
 
@@ -46,25 +54,34 @@ in this repo use that style; they are history and are not re-tagged.
    Updates `packages/pow-cli/pyproject.toml`, the root `pyproject.toml`, and
    `uv.lock`. Nothing else. Add `--dry-run` to preview.
 
-2. **Write the CHANGELOG entry and commit.** Use the same PEP 440 string as the
-   tag, e.g. `## [0.3.0rc1] - 2026-07-28`, then:
+2. **Write the CHANGELOG entry and commit.** Use the SemVer spelling in the
+   heading, e.g. `## [0.3.0-rc.1] - 2026-07-28`, then:
    ```bash
-   git commit -am "chore: bump to 0.3.0rc1"
+   git commit -am "chore: bump to 0.3.0-rc.1"
    ```
 
 3. **Tag and push.**
    ```bash
-   git tag -a v0.3.0rc1 -m "pow-cli 0.3.0rc1"
-   git push origin main && git push origin v0.3.0rc1
+   git tag -a v0.3.0-rc.1 -m "pow-cli 0.3.0-rc.1"
+   git push origin main && git push origin v0.3.0-rc.1
    ```
    Nothing is published yet.
 
-4. **Create the GitHub release** from the tag in the web UI (Releases → *Draft a
-   new release* → choose the tag → *Publish release*). Publishing it triggers the
-   workflow; a draft triggers nothing.
+4. **Create the GitHub release** — this is what triggers the workflow:
+   ```bash
+   gh release create v0.3.0-rc.1 \
+     --title "pow@0.3.0-rc.1" \
+     --prerelease \
+     --notes "Please refer to [CHANGELOG.md](https://github.com/isaac-powerpack/pow/blob/v0.3.0-rc.1/packages/pow-cli/CHANGELOG.md) for details."
+   ```
+   Drop `--prerelease` for a stable release. The `blob/<tag>` path must be the tag
+   being released so the link resolves to the CHANGELOG as of that release. Without
+   `gh`, do the same from the web UI (Releases → *Draft a new release* → choose the
+   tag → *Publish release*); a draft triggers nothing.
 
 5. Watch the run in **Actions**. Once the `testpypi` job succeeds, optionally verify
-   the upload (`--no-deps` because `isaacsim` is not on TestPyPI):
+   the upload — note the **PEP 440** version here, since that is what PyPI serves
+   (`--no-deps` because `isaacsim` is not on TestPyPI):
    ```bash
    uv pip install --no-deps -i https://test.pypi.org/simple/ pow-cli==0.3.0rc1
    ```

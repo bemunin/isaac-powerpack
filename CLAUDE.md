@@ -5,26 +5,48 @@ Main package: `packages/pow-cli`.
 
 ## Releasing
 
+Two spellings of the same version are in play, and mixing them up breaks the
+publish workflow:
+
+- **SemVer** (`0.3.0-rc.1`) — git tags, GitHub release title, CHANGELOG heading.
+- **PEP 440 canonical** (`0.3.0rc1`) — both `pyproject.toml` files, the built
+  artifact, PyPI. `uv` and PyPI normalize to this form; it is not a choice.
+
+A stable release is identical in both (`0.3.0`). Below, `<semver>` means
+`0.3.0-rc.1` and `<pep440>` means `0.3.0rc1`.
+
 When the user asks to release a version, do these steps in order from the repo
 root (details in `docs/releasing.md`):
 
 1. **Bump** to the version the user specified:
-   `uv run bump.py <version>` (exact, e.g. `0.3.0rc1`) or
+   `uv run bump.py <pep440>` (exact, e.g. `0.3.0rc1`) or
    `uv run bump.py --bump <part>` (major/minor/patch/stable/alpha/beta/rc;
    repeatable, e.g. `--bump minor --bump rc`). Updates both `pyproject.toml`
    files and `uv.lock`; commits nothing.
-2. **Changelog**: add a `## [<version>] - YYYY-MM-DD` entry at the top of
+2. **Changelog**: add a `## [<semver>] - YYYY-MM-DD` entry at the top of
    `packages/pow-cli/CHANGELOG.md` summarizing changes since the last release
-   (from git log). Use the exact PEP 440 string in the heading
-   (`[0.3.0rc1]`, not `[0.3.0-rc.1]`) — bump.py warns otherwise.
-3. **Commit**: `git commit -m "chore: bump to <version>"`
-4. **Tag & push**: `git tag -a v<version> -m "pow-cli <version>"`, then push
-   the branch and the tag to origin.
+   (from git log), e.g. `## [0.3.0-rc.1] - 2026-07-28`.
+3. **Commit**: `git commit -m "chore: bump to <semver>"`
+4. **Tag & push**: `git tag -a v<semver> -m "pow-cli <semver>"`, then push the
+   branch and the tag to origin. This publishes nothing on its own.
+5. **Create the GitHub release** — this is what triggers publishing:
+   ```bash
+   gh release create v<semver> \
+     --title "pow@<semver>" \
+     --prerelease \
+     --notes "Please refer to [CHANGELOG.md](https://github.com/isaac-powerpack/pow/blob/v<semver>/packages/pow-cli/CHANGELOG.md) for details."
+   ```
+   - Pass `--prerelease` only when the version has an `a`/`b`/`rc` part; omit it
+     for a stable release.
+   - The `blob/v<semver>` path must be the tag just pushed, so the link resolves
+     to the CHANGELOG as of that release.
+   - Requires `gh` installed and authenticated as `bemunin`; otherwise create the
+     release from the tag in the GitHub web UI with the same title, pre-release
+     flag, and notes.
 
-Pushing the tag publishes nothing. The user then creates the GitHub release
-from the tag manually in the web UI; publishing the release triggers
-`.github/workflows/publish.yml` (TestPyPI automatically, PyPI after the user
-approves the `pypi` environment).
+Publishing the release triggers `.github/workflows/publish.yml`: TestPyPI
+uploads automatically, then PyPI waits for the user to approve the `pypi`
+environment.
 
 ## Running tests
 
