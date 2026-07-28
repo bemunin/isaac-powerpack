@@ -2,6 +2,20 @@
 
 All notable changes to the `pow-cli` package will be documented in this file.
 
+## [0.2.0] - 2026-07-28
+
+Stable release of the 0.2.0 line, promoted from `0.2.0-rc.2` with no functional
+changes.
+
+Everything new since `0.1.1` is listed in the two release candidate entries
+below — headline items: the new `pow sim` and `pow ros build` commands, the
+`ros_bridge` and `ros_docker_image` config keys, Jazzy-only ROS 2 support
+(Humble removed), a faster `pow init` that no longer builds the ROS workspace,
+and fixes for `rosdep install`, `cpu_performance_mode`, and `ros2` tab
+completion inside the container.
+
+---
+
 ## [0.2.0-rc.2] - 2026-07-28
 
 ### Added

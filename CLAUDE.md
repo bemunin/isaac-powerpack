@@ -53,10 +53,11 @@ remote, so confirm each one first — see
 5. **Create the GitHub release** — this is what triggers publishing:
    ```bash
    gh release create v<semver> \
-     --title "pow@<semver>" \
+     --title "pow@v<semver>" \
      --prerelease \
      --notes "Please refer to [CHANGELOG.md](https://github.com/isaac-powerpack/pow/blob/v<semver>/packages/pow-cli/CHANGELOG.md) for details."
    ```
+   - The title keeps the `v` (`pow@v0.3.0-rc.1`), matching every existing release.
    - Pass `--prerelease` only when the version has an `a`/`b`/`rc` part; omit it
      for a stable release.
    - The `blob/v<semver>` path must be the tag just pushed, so the link resolves

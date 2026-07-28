@@ -189,7 +189,7 @@ def main() -> None:
         f"  1. add the [{tag_version}] entry to {CHANGELOG}\n"
         f"  2. git commit -m 'chore: bump to {tag_version}'\n"
         f"  3. git tag -a v{tag_version} -m 'pow-cli {tag_version}', push branch and tag\n"
-        f"  4. gh release create v{tag_version} --title 'pow@{tag_version}'"
+        f"  4. gh release create v{tag_version} --title 'pow@v{tag_version}'"
         f"{' --prerelease' if tag_version != new_version else ''} --notes ...\n"
         f"To undo:\n"
         f"  git checkout -- {' '.join(VERSIONED_FILES)}"

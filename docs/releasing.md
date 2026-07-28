@@ -70,10 +70,11 @@ repo keep working, but new releases should use the SemVer form.
 4. **Create the GitHub release** — this is what triggers the workflow:
    ```bash
    gh release create v0.3.0-rc.1 \
-     --title "pow@0.3.0-rc.1" \
+     --title "pow@v0.3.0-rc.1" \
      --prerelease \
      --notes "Please refer to [CHANGELOG.md](https://github.com/isaac-powerpack/pow/blob/v0.3.0-rc.1/packages/pow-cli/CHANGELOG.md) for details."
    ```
+   The title keeps the `v` (`pow@v0.3.0-rc.1`), matching every existing release.
    Drop `--prerelease` for a stable release. The `blob/<tag>` path must be the tag
    being released so the link resolves to the CHANGELOG as of that release. Without
    `gh`, do the same from the web UI (Releases → *Draft a new release* → choose the

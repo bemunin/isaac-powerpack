@@ -342,7 +342,7 @@ wheels = [
 
 [[package]]
 name = "isaac-powerpack"
-version = "0.2.0rc2"
+version = "0.2.0"
 source = { virtual = "." }
 dependencies = [
     { name = "distro" },
@@ -569,7 +569,7 @@ wheels = [
 
 [[package]]
 name = "pow-cli"
-version = "0.2.0rc2"
+version = "0.2.0"
 source = { editable = "packages/pow-cli" }
 dependencies = [
     { name = "aiohttp" },
