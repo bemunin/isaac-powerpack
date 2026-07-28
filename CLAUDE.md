@@ -3,6 +3,18 @@
 CLI tool (`pow`) for managing Isaac Sim projects with ROS 2 integration.
 Main package: `packages/pow-cli`.
 
+## Ask before committing or pushing (ALWAYS)
+
+Never run `git commit`, `git push`, `git tag`, `gh release create`, or anything
+else that writes to the repository or the remote without asking first and getting
+an explicit yes — even when the task obviously ends in a commit, and even when a
+procedure in this file (such as [Releasing](#releasing)) lists those steps.
+
+Do the work, leave the changes in the working tree, then say what you changed and
+what command you would run. This applies to amending, force-pushing, and deleting
+or moving tags as well. Editing files, running tests, and other read-only or
+local-only work needs no confirmation.
+
 ## Commit attribution
 
 `bemunin` is the sole author of this repository. Never add a
@@ -23,7 +35,9 @@ A stable release is identical in both (`0.3.0`). Below, `<semver>` means
 `0.3.0-rc.1` and `<pep440>` means `0.3.0rc1`.
 
 When the user asks to release a version, do these steps in order from the repo
-root (details in `docs/releasing.md`):
+root (details in `docs/releasing.md`). Steps 3–5 write to the repo and the
+remote, so confirm each one first — see
+[Ask before committing or pushing](#ask-before-committing-or-pushing-always):
 
 1. **Bump** to the version the user specified:
    `uv run bump.py <pep440>` (exact, e.g. `0.3.0rc1`) or
