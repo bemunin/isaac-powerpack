@@ -2,6 +2,16 @@
 
 All notable changes to the `pow-cli` package will be documented in this file.
 
+## [Unreleased]
+
+### Removed
+
+- **`pow check`** — the Isaac Sim compatibility check command has been removed.
+  pow-cli no longer depends on the `isaacsim[compatibility-check]` extra, so
+  `isaacsim-app` is no longer installed as a transitive dependency
+
+---
+
 ## [0.2.0] - 2026-07-28
 
 Stable release of the 0.2.0 line, promoted from `0.2.0-rc.2` with no functional

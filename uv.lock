@@ -374,20 +374,6 @@ dependencies = [
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/cc/32/8928c0bf7197982053c943dc557de6b77e8f3c4dce3ca3f812d858a479fa/isaacsim-5.1.0.0.tar.gz", hash = "sha256:ec39e9957050a08288adde82af929c9513cf09f0c9bb44d7b98d97a3f7974038", size = 1081, upload-time = "2025-10-21T18:56:49.554Z" }
 
-[package.optional-dependencies]
-compatibility-check = [
-    { name = "isaacsim-app" },
-]
-
-[[package]]
-name = "isaacsim-app"
-version = "5.1.0.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "isaacsim-kernel" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/72/e8/01a55a3328d8c0d5bd40f21833262dd0fb383a25fccbc6c5e2aecea525e2/isaacsim_app-5.1.0.0.tar.gz", hash = "sha256:dd78828e21c6a38e6a8b71857f259ac244a301f6e468f3ae4e660479dcfed0c9", size = 854, upload-time = "2025-10-21T19:11:30.994Z" }
-
 [[package]]
 name = "isaacsim-kernel"
 version = "5.1.0.0"
@@ -575,7 +561,7 @@ dependencies = [
     { name = "aiohttp" },
     { name = "click" },
     { name = "distro" },
-    { name = "isaacsim", extra = ["compatibility-check"] },
+    { name = "isaacsim" },
     { name = "packaging" },
     { name = "rich" },
     { name = "setuptools" },
@@ -593,7 +579,7 @@ requires-dist = [
     { name = "aiohttp", specifier = ">=3.11.11" },
     { name = "click", specifier = ">=8.1.7" },
     { name = "distro", specifier = ">=1.9.0" },
-    { name = "isaacsim", extras = ["compatibility-check"], specifier = ">=5.1.0.0" },
+    { name = "isaacsim", specifier = ">=5.1.0.0" },
     { name = "packaging", specifier = ">=26.0" },
     { name = "rich" },
     { name = "setuptools", specifier = ">=82.0.1" },

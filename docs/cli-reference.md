@@ -149,16 +149,6 @@ pow ros build --no-cache
 
 ---
 
-## `pow check`
-
-Run the Isaac Sim compatibility check to verify your system meets requirements.
-
-```bash
-pow check
-```
-
----
-
 ## `pow asset`
 
 Group of commands to manage Isaac Sim local assets.

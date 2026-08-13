@@ -4,7 +4,6 @@ import click
 
 from .init import init_cmd
 # from .add import add_group
-from .check import check_cmd
 from .lint import lint_group
 from .run import run_cmd
 from .sim import sim_cmd
@@ -30,7 +29,6 @@ def pow_group():
 
 # Register commands
 pow_group.add_command(init_cmd)
-pow_group.add_command(check_cmd)
 pow_group.add_command(lint_group)
 pow_group.add_command(run_cmd)
 pow_group.add_command(sim_cmd)
