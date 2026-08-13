@@ -6,7 +6,7 @@ from .init import init_cmd
 # from .add import add_group
 from .lint import lint_group
 from .run import run_cmd
-from .sim import sim_cmd
+from .sim import sim_group
 from .ros import ros_group
 from .python import python_cmd
 from .asset import asset_group
@@ -31,7 +31,7 @@ def pow_group():
 pow_group.add_command(init_cmd)
 pow_group.add_command(lint_group)
 pow_group.add_command(run_cmd)
-pow_group.add_command(sim_cmd)
+pow_group.add_command(sim_group)
 pow_group.add_command(ros_group)
 pow_group.add_command(python_cmd)
 pow_group.add_command(asset_group)

@@ -202,6 +202,95 @@ class Runner:
             console.print("[yellow]Isaac Sim launch aborted by user.[/yellow]")
 
     @staticmethod
+    def run_sim_check(
+        version: str = PowConfig.ISAACSIM_VERSION,
+        extra_args: list[str] | None = None,
+    ) -> None:
+        """Run the Isaac Sim compatibility check bundled with the installation.
+
+        Wraps ``<global_path>/isaacsim/<version>/isaac-sim.compatibility_check.sh``.
+        Like :meth:`run_sim` this reads no pow.toml and requires no project.  The
+        script sets up its own ROS environment (and honours ``--no-ros-env``), so
+        no bridge environment is built here.
+
+        Args:
+            version: Isaac Sim version under ``<global_path>/isaacsim/``.
+            extra_args: Arguments forwarded verbatim to the check script.
+        """
+        if platform.machine().lower() not in ("x86_64", "amd64"):
+            raise click.ClickException("Unsupported platform. Only x86_64 is supported by Isaac Sim.")
+
+        isaacsim_dir = PowConfig.resolve_global_path() / "isaacsim" / version
+        check_script = isaacsim_dir / "isaac-sim.compatibility_check.sh"
+
+        if not check_script.exists():
+            raise click.ClickException(
+                f"Isaac Sim compatibility check not found at {check_script}\n"
+                "Run 'pow init' first to install Isaac Sim."
+            )
+
+        source_env = os.environ.copy()
+        # The host PYTHONPATH is usually a ROS install built for another Python
+        # version; kit's interpreter must not see it (cf. RosManager.bridge_env).
+        source_env.pop("PYTHONPATH", None)
+        module_paths = Runner._compat_check_pythonpath(isaacsim_dir)
+        if module_paths:
+            source_env["PYTHONPATH"] = ":".join(module_paths)
+
+        cmd = [str(check_script)]
+        if extra_args:
+            cmd.extend(extra_args)
+
+        console.print(f"[blue]Running: {' '.join(shlex.quote(c) for c in cmd)}[/blue]")
+
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            env=source_env,
+        )
+
+        output_lines: list[str] = []
+        try:
+            for line in process.stdout:
+                print(line, end="", flush=True)
+                output_lines.append(line)
+            process.wait()
+        except KeyboardInterrupt:
+            process.kill()
+            process.wait()
+            console.print("[yellow]Compatibility check aborted by user.[/yellow]")
+            return
+
+        if process.returncode != 0:
+            raise click.ClickException(f"Compatibility check exited with code {process.returncode}")
+
+        # kit exits 0 even when the check extension fails to start, so a run
+        # without a verdict is a failure, not a silent success.
+        if not any("System checking result:" in line for line in output_lines):
+            raise click.ClickException(
+                "The compatibility check produced no result.\n"
+                "The check app started but reported nothing - see the errors above."
+            )
+
+    @staticmethod
+    def _compat_check_pythonpath(isaacsim_dir: Path) -> list[str]:
+        """Install-local directories that provide ``packaging`` and ``setuptools``.
+
+        ``isaac-sim.compatibility_check.sh`` never sources ``setup_python_env.sh``,
+        so the check extension's ``import packaging`` only succeeds when kit
+        happens to have loaded a pip_archive extension first.  Putting the bundled
+        copies on PYTHONPATH makes it independent of extension load order.
+        """
+        candidates = [
+            isaacsim_dir / "exts" / "omni.isaac.core_archive" / "pip_prebundle",
+            *sorted(isaacsim_dir.glob("kit/python/lib/python3.*/site-packages")),
+            *sorted(isaacsim_dir.glob("extscache/omni.*pip_archive-*/pip_prebundle")),
+        ]
+        return [str(p) for p in candidates if p.is_dir()]
+
+    @staticmethod
     def run_python(profile: str = "default", extra_args: list[str] | None = None) -> None:
         """Run the Isaac Sim bundled Python interpreter.
 

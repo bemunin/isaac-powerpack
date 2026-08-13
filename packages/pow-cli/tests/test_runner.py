@@ -285,6 +285,125 @@ def test_run_sim_missing_install_raises(mocker):
     run.assert_not_called()
 
 
+# ── run_sim_check (bundled compatibility check) ─────────────────────────────────
+# The check streams through Popen so a run that prints no verdict can be caught;
+# like run_sim these must never instantiate PowConfig.
+
+PASSED_OUTPUT = ["starting up\n", "System checking result: PASSED\n"]
+
+
+@pytest.fixture
+def check_env(mocker):
+    """Patch everything run_sim_check touches, minus PowConfig."""
+    mocker.patch("pathlib.Path.home", return_value=Path("/home/user"))
+    mocker.patch("pathlib.Path.exists", return_value=True)
+    mocker.patch("pathlib.Path.is_dir", return_value=True)
+    mocker.patch("pathlib.Path.glob", return_value=[])
+    mocker.patch("platform.machine", return_value="x86_64")
+
+    process = mocker.MagicMock()
+    process.stdout = iter(PASSED_OUTPUT)
+    process.returncode = 0
+    popen = mocker.patch("subprocess.Popen", return_value=process)
+    return {
+        "popen": popen,
+        "process": process,
+        "bridge_env": mocker.patch("pow_cli.core.runner.RosManager.bridge_env"),
+    }
+
+
+def test_run_sim_check_builds_command_from_defaults(check_env):
+    Runner.run_sim_check()
+
+    args, kwargs = check_env["popen"].call_args
+    assert args[0] == ["/home/user/.pow/isaacsim/5.1.0/isaac-sim.compatibility_check.sh"]
+    assert kwargs["stderr"] == subprocess.STDOUT
+
+
+def test_run_sim_check_forwards_extra_args_and_skips_bridge(check_env):
+    """The script sets up its own ROS env, so no bridge env is built."""
+    Runner.run_sim_check(extra_args=["--no-ros-env"])
+
+    assert check_env["popen"].call_args[0][0][-1] == "--no-ros-env"
+    check_env["bridge_env"].assert_not_called()
+
+
+def test_run_sim_check_honors_version(check_env):
+    Runner.run_sim_check(version="5.0.0")
+
+    assert (
+        check_env["popen"].call_args[0][0][0]
+        == "/home/user/.pow/isaacsim/5.0.0/isaac-sim.compatibility_check.sh"
+    )
+
+
+def test_run_sim_check_puts_bundled_modules_on_pythonpath(check_env):
+    """The check extension imports `packaging`, which kit's Python lacks."""
+    Runner.run_sim_check()
+
+    pythonpath = check_env["popen"].call_args.kwargs["env"]["PYTHONPATH"]
+    assert (
+        "/home/user/.pow/isaacsim/5.1.0/exts/omni.isaac.core_archive/pip_prebundle"
+        in pythonpath.split(":")
+    )
+
+
+def test_run_sim_check_drops_host_pythonpath(check_env, mocker):
+    """A host ROS PYTHONPATH targets another Python version - keep it out."""
+    ros_path = "/opt/ros/jazzy/lib/python3.12/site-packages"
+    mocker.patch.dict("os.environ", {"PYTHONPATH": ros_path, "MY_VAR": "1"}, clear=True)
+
+    Runner.run_sim_check()
+
+    env = check_env["popen"].call_args.kwargs["env"]
+    assert ros_path not in env["PYTHONPATH"]
+    assert env["MY_VAR"] == "1"
+
+
+def test_run_sim_check_without_bundled_paths_leaves_pythonpath_unset(check_env, mocker):
+    """No known module dirs in the install: fall back to a bare environment."""
+    mocker.patch("pathlib.Path.is_dir", return_value=False)
+    mocker.patch.dict("os.environ", {"PYTHONPATH": "/host/path"}, clear=True)
+
+    Runner.run_sim_check()
+
+    assert "PYTHONPATH" not in check_env["popen"].call_args.kwargs["env"]
+
+
+def test_run_sim_check_accepts_a_verdict(check_env):
+    Runner.run_sim_check()  # PASSED_OUTPUT contains the verdict line
+
+
+def test_run_sim_check_without_verdict_raises(check_env):
+    """kit exits 0 even when the check extension fails to start."""
+    check_env["process"].stdout = iter(
+        ["[Error] Failed to import python module isaacsim.app.compatibility_check\n"]
+    )
+
+    with pytest.raises(click.ClickException, match="produced no result"):
+        Runner.run_sim_check()
+
+
+def test_run_sim_check_nonzero_exit_takes_priority(check_env):
+    check_env["process"].stdout = iter(["boom\n"])
+    check_env["process"].returncode = 3
+
+    with pytest.raises(click.ClickException, match="exited with code 3"):
+        Runner.run_sim_check()
+
+
+def test_run_sim_check_missing_script_raises(mocker):
+    mocker.patch("pathlib.Path.home", return_value=Path("/home/user"))
+    mocker.patch("pathlib.Path.exists", return_value=False)
+    mocker.patch("platform.machine", return_value="x86_64")
+    popen = mocker.patch("subprocess.Popen")
+
+    with pytest.raises(click.ClickException, match="compatibility check not found at"):
+        Runner.run_sim_check()
+
+    popen.assert_not_called()
+
+
 def test_run_python_calls_subprocess(mock_config, mocker):
     mocker.patch("pathlib.Path.exists", return_value=True)
     mock_run = mocker.patch("subprocess.run")

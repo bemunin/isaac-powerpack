@@ -4,11 +4,43 @@ All notable changes to the `pow-cli` package will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **`pow sim check`** — run the Isaac Sim compatibility check from the managed
+  installation (`.pow/isaacsim/<version>/isaac-sim.compatibility_check.sh`), with
+  `-v/--version` to pick the version. Needs no project and no extra pip
+  dependency; the script sets up its own ROS environment (forward
+  `-- --no-ros-env` to skip it). `pow sim` is now a command group whose default
+  subcommand is `launch` — bare `pow sim [args...]` still launches Isaac Sim and
+  forwards raw arguments exactly as before, and `pow sim launch` is the explicit
+  form
+
+### Fixed
+
+- **`pow sim check` could report nothing at all** — inside Isaac Sim's bundled
+  Python the check extension failed with `ModuleNotFoundError: No module named
+  'packaging'` (then `'setuptools'`) and never produced a verdict. The vendor
+  launcher `isaac-sim.compatibility_check.sh` never sources
+  `setup_python_env.sh`, so whether `packaging` was importable depended on kit's
+  extension load order. pow now puts the installation's own bundled module
+  directories on `PYTHONPATH` and no longer forwards the host `PYTHONPATH` (which
+  typically targets another Python version, the same reason the ROS bridge
+  environment strips it)
+- **`pow sim check` exited 0 when the check produced no result** — Isaac Sim exits
+  0 even when the check app fails to start. The command now streams the output and
+  fails with a clear message if no `System checking result:` line appears; a
+  non-zero exit code from the check still takes priority
+
 ### Removed
 
-- **`pow check`** — the Isaac Sim compatibility check command has been removed.
-  pow-cli no longer depends on the `isaacsim[compatibility-check]` extra, so
-  `isaacsim-app` is no longer installed as a transitive dependency
+- **`pow check`** — the standalone Isaac Sim compatibility check command has been
+  removed, replaced by `pow sim check` above. It ran the check through the pip
+  `isaacsim` entry point, so pow-cli no longer depends on the
+  `isaacsim[compatibility-check]` extra and `isaacsim-app` is no longer installed
+  as a transitive dependency
+- The `packaging` and `setuptools` runtime dependencies, which existed only for
+  that pip-based check. `pow sim check` reads those modules from the Isaac Sim
+  installation instead
 
 ---
 

@@ -1,7 +1,7 @@
 import pytest
 from click.testing import CliRunner
 
-from pow_cli.cli.sim import sim_cmd
+from pow_cli.cli.sim import sim_group
 
 
 @pytest.mark.cli
@@ -15,7 +15,7 @@ class TestSim:
 
     def _invoke(self, args):
         return self.runner.invoke(
-            sim_cmd, args, env={"NO_COLOR": "1", "TERM": "dumb"}
+            sim_group, args, env={"NO_COLOR": "1", "TERM": "dumb"}
         )
 
     def test_bare_sim_uses_defaults(self):
@@ -67,5 +67,59 @@ class TestSim:
         """No pow.toml above cwd must not produce a 'Not initialized' error."""
         monkeypatch.chdir(tmp_path)
         result = self._invoke([])
+        assert result.exit_code == 0
+        assert "Not initialized" not in result.output
+
+    def test_explicit_launch_subcommand(self):
+        """`pow sim launch` is the explicit form of the bare command."""
+        result = self._invoke(["launch", "--", "--no-window"])
+        assert result.exit_code == 0
+        self.mock_run.assert_called_once_with(
+            version="5.1.0", ros_bridge="jazzy", extra_args=["--no-window"]
+        )
+
+    def test_help_lists_subcommands(self):
+        result = self._invoke(["--help"])
+        assert result.exit_code == 0
+        assert "launch" in result.output
+        assert "check" in result.output
+        self.mock_run.assert_not_called()
+
+
+@pytest.mark.cli
+class TestSimCheck:
+    """`pow sim check` forwards the version and raw args to Runner.run_sim_check."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self, mocker):
+        self.runner = CliRunner()
+        self.mock_check = mocker.patch("pow_cli.core.runner.Runner.run_sim_check")
+        self.mock_run = mocker.patch("pow_cli.core.runner.Runner.run_sim")
+
+    def _invoke(self, args):
+        return self.runner.invoke(
+            sim_group, args, env={"NO_COLOR": "1", "TERM": "dumb"}
+        )
+
+    def test_check_uses_default_version(self):
+        result = self._invoke(["check"])
+        assert result.exit_code == 0
+        self.mock_check.assert_called_once_with(version="5.1.0", extra_args=[])
+        self.mock_run.assert_not_called()
+
+    def test_check_honors_version_option(self):
+        result = self._invoke(["check", "-v", "5.0.0"])
+        assert result.exit_code == 0
+        assert self.mock_check.call_args.kwargs["version"] == "5.0.0"
+
+    def test_check_forwards_raw_args(self):
+        result = self._invoke(["check", "--", "--no-ros-env"])
+        assert result.exit_code == 0
+        assert self.mock_check.call_args.kwargs["extra_args"] == ["--no-ros-env"]
+
+    def test_check_runs_outside_a_pow_project(self, tmp_path, monkeypatch):
+        """No pow.toml above cwd must not produce a 'Not initialized' error."""
+        monkeypatch.chdir(tmp_path)
+        result = self._invoke(["check"])
         assert result.exit_code == 0
         assert "Not initialized" not in result.output

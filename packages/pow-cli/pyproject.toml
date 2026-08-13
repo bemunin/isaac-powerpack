@@ -9,9 +9,7 @@ dependencies = [
     "click>=8.1.7",
     "distro>=1.9.0",
     "isaacsim>=5.1.0.0",
-    "packaging>=26.0",
     "rich",
-    "setuptools>=82.0.1",
     "tomlkit>=0.14.0",
 ]
 license = "Apache-2.0"

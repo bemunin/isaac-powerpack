@@ -59,6 +59,8 @@ Run Isaac Sim from **any** directory. Unlike `pow run`, this command needs no pr
 
 Use it to open Isaac Sim outside a project — inspecting a stray USD file, or sanity-checking the installation.
 
+`pow sim` is a command group whose default subcommand is `launch`: bare `pow sim [args...]` and `pow sim launch [args...]` are equivalent.
+
 ```bash
 # Launch the default version (5.1.0) with the jazzy ROS 2 bridge
 pow sim
@@ -74,6 +76,9 @@ pow sim -v 5.0.0
 
 # Pass raw arguments directly to Isaac Sim
 pow sim -- --no-window --/renderer/enabled=gpu
+
+# Same as bare `pow sim`, written explicitly
+pow sim launch -- --no-window
 ```
 
 | Option              | Description                                                  |
@@ -86,6 +91,32 @@ pow sim -- --no-window --/renderer/enabled=gpu
 > Because the ROS 2 bridge is enabled by default, `pow sim` clears the host ROS environment and points `LD_LIBRARY_PATH` at Isaac Sim's bundled bridge libs — the same environment `pow run` builds when `enable_ros = true`. Pass `--no-ros` to inherit your shell environment untouched.
 >
 > `-v` on this subcommand selects the Isaac Sim version; `pow -v` (on the root command) still prints the pow CLI version.
+
+### `pow sim check`
+
+Run the Isaac Sim compatibility check to verify your system meets the requirements. It runs `.pow/isaacsim/<version>/isaac-sim.compatibility_check.sh` from the installation managed by `pow init`, so it needs no project.
+
+```bash
+# Check the default version (5.1.0)
+pow sim check
+
+# Check a different installed version
+pow sim check -v 5.0.0
+
+# Skip the check script's own ROS environment setup
+pow sim check -- --no-ros-env
+```
+
+| Option              | Description                                        |
+| :------------------ | :------------------------------------------------- |
+| `-v`, `--version`   | Isaac Sim version to check (default: `5.1.0`)      |
+
+> [!NOTE]
+> `--ros` / `--no-ros` do not apply here: the check script sources its own ROS environment. Forward `-- --no-ros-env` to skip that step. Raw arguments after `--` go straight to the script.
+>
+> Your shell's `PYTHONPATH` is **not** forwarded (it usually points at a ROS install built for a different Python version). Instead, pow puts the installation's own bundled module directories on `PYTHONPATH`, because the vendor launcher never sources `setup_python_env.sh` and the check extension needs `packaging` — without it the extension fails to import and reports nothing.
+>
+> A run that prints no `System checking result:` line is reported as a failure (exit 1), since Isaac Sim exits 0 even when the check app fails to start.
 
 ---
 
