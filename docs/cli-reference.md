@@ -96,7 +96,20 @@ Run Isaac Sim from **any** directory. Unlike `pow run`, this command needs no pr
 
 Use it to open Isaac Sim outside a project — inspecting a stray USD file, or sanity-checking the installation.
 
-Without `-v` the version is auto-detected from `.pow/isaacsim/`: the sole installation when there is one, otherwise the newest known release installed.
+Without `-v` the version is resolved in this order:
+
+1. the `-v`/`--version` option;
+2. `[sim] default_version` in `~/.pow/system.toml`, when set;
+3. the newest release installed under `.pow/isaacsim/` (the sole installation when there is one).
+
+Pin a default when several versions are installed by editing `~/.pow/system.toml`:
+
+```toml
+[sim]
+default_version = "5.1.0"
+```
+
+If the pinned version is not installed, `pow sim` prints a warning and falls back to the newest installed one. See [Configuration](configuration.md#global-settings-powsystemtoml).
 
 `pow sim` is a command group whose default subcommand is `launch`: bare `pow sim [args...]` and `pow sim launch [args...]` are equivalent.
 
@@ -122,7 +135,7 @@ pow sim launch -- --no-window
 
 | Option              | Description                                                  |
 | :------------------ | :----------------------------------------------------------- |
-| `-v`, `--version`   | Isaac Sim version to run (default: the installed version)    |
+| `-v`, `--version`   | Isaac Sim version to run (default: `[sim] default_version` in `system.toml`, else the installed version) |
 | `--ros`             | ROS 2 bridge distro: `jazzy` (default) or `humble`           |
 | `--no-ros`          | Launch without the ROS 2 bridge environment; wins over `--ros` |
 
@@ -133,7 +146,7 @@ pow sim launch -- --no-window
 
 ### `pow sim check`
 
-Run the Isaac Sim compatibility check to verify your system meets the requirements. It runs `.pow/isaacsim/<version>/isaac-sim.compatibility_check.sh` from the installation managed by `pow init`, so it needs no project.
+Run the Isaac Sim compatibility check to verify your system meets the requirements. It runs `.pow/isaacsim/<version>/isaac-sim.compatibility_check.sh` from the installation managed by `pow init`, so it needs no project. The version is resolved exactly as for `pow sim` above.
 
 ```bash
 # Check the installed version
@@ -148,7 +161,7 @@ pow sim check -- --no-ros-env
 
 | Option              | Description                                        |
 | :------------------ | :------------------------------------------------- |
-| `-v`, `--version`   | Isaac Sim version to check (default: the installed version) |
+| `-v`, `--version`   | Isaac Sim version to check (default: `[sim] default_version` in `system.toml`, else the installed version) |
 
 > [!NOTE]
 > `--ros` / `--no-ros` do not apply here: the check script sources its own ROS environment. Forward `-- --no-ros-env` to skip that step. Raw arguments after `--` go straight to the script.

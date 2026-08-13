@@ -186,7 +186,7 @@ sim-project/
 │   └── 6.0.1/            # Isaac Sim 6.0.1 app files
 ├── modules/              # Shared modules
 ├── assets/               # mounting folder for local assets
-└── system.toml           # Global system configuration
+└── system.toml           # Global system configuration ([sim] default_version, [asset])
 ```
 
 

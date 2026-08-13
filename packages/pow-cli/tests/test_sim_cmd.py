@@ -83,8 +83,10 @@ class TestSim:
         assert result.exit_code == 0
         assert "Not initialized" not in result.output
 
-    def test_explicit_launch_subcommand(self):
+    def test_explicit_launch_subcommand(self, mocker):
         """`pow sim launch` is the explicit form of the bare command."""
+        mocker.patch.object(PowConfig, "resolve_installed_version", return_value="5.1.0")
+
         result = self._invoke(["launch", "--", "--no-window"])
         assert result.exit_code == 0
         self.mock_run.assert_called_once_with(
@@ -97,6 +99,20 @@ class TestSim:
         assert "launch" in result.output
         assert "check" in result.output
         self.mock_run.assert_not_called()
+
+    def test_help_lists_launch_options(self, mocker):
+        """Bare `pow sim` accepts launch's options, so its help must show them."""
+        scan = mocker.patch.object(
+            PowConfig, "resolve_installed_version", return_value="6.0.1"
+        )
+
+        result = self._invoke(["--help"])
+        assert result.exit_code == 0
+        assert "-v, --version" in result.output
+        assert "--ros" in result.output
+        assert "--no-ros" in result.output
+        # The shown default is a literal string; rendering help must not scan.
+        scan.assert_not_called()
 
 
 @pytest.mark.cli
@@ -114,7 +130,9 @@ class TestSimCheck:
             sim_group, args, env={"NO_COLOR": "1", "TERM": "dumb"}
         )
 
-    def test_check_uses_default_version(self):
+    def test_check_uses_default_version(self, mocker):
+        mocker.patch.object(PowConfig, "resolve_installed_version", return_value="5.1.0")
+
         result = self._invoke(["check"])
         assert result.exit_code == 0
         self.mock_check.assert_called_once_with(version="5.1.0", extra_args=[])
@@ -136,3 +154,80 @@ class TestSimCheck:
         result = self._invoke(["check"])
         assert result.exit_code == 0
         assert "Not initialized" not in result.output
+
+
+@pytest.mark.cli
+class TestSimDefaultVersion:
+    """`-v` -> [sim] default_version in system.toml -> newest installed."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self, mocker):
+        self.runner = CliRunner()
+        self.mock_run = mocker.patch("pow_cli.core.runner.Runner.run_sim")
+        self.mock_check = mocker.patch("pow_cli.core.runner.Runner.run_sim_check")
+        self.mocker = mocker
+
+    def _invoke(self, args):
+        return self.runner.invoke(
+            sim_group, args, env={"NO_COLOR": "1", "TERM": "dumb"}
+        )
+
+    def _pin(self, pinned, installed):
+        self.mocker.patch.object(
+            PowConfig, "configured_default_version", return_value=pinned
+        )
+        self.mocker.patch.object(
+            PowConfig, "installed_versions", return_value=list(installed)
+        )
+        self.mocker.patch.object(
+            PowConfig,
+            "resolve_installed_version",
+            return_value=installed[0] if installed else PowConfig.ISAACSIM_VERSION,
+        )
+
+    def test_pinned_version_is_used(self):
+        self._pin("5.1.0", ["6.0.1", "5.1.0"])
+
+        result = self._invoke([])
+        assert result.exit_code == 0
+        assert self.mock_run.call_args.kwargs["version"] == "5.1.0"
+
+    def test_version_option_overrides_the_pin(self):
+        self._pin("5.1.0", ["6.0.1", "5.1.0"])
+
+        result = self._invoke(["-v", "6.0.1"])
+        assert result.exit_code == 0
+        assert self.mock_run.call_args.kwargs["version"] == "6.0.1"
+        assert "system.toml pins" not in result.output
+
+    def test_pin_that_is_not_installed_warns_and_falls_back(self):
+        self._pin("9.9.9", ["6.0.1"])
+
+        result = self._invoke([])
+        assert result.exit_code == 0
+        assert self.mock_run.call_args.kwargs["version"] == "6.0.1"
+        assert "9.9.9" in result.output
+        assert "6.0.1" in result.output
+
+    def test_pin_is_honored_when_nothing_is_installed(self):
+        """The Runner's own 'not found' error should name the pinned version."""
+        self._pin("5.1.0", [])
+
+        result = self._invoke([])
+        assert result.exit_code == 0
+        assert self.mock_run.call_args.kwargs["version"] == "5.1.0"
+        assert "system.toml pins" not in result.output
+
+    def test_no_pin_falls_back_to_newest_installed(self):
+        self._pin("", ["6.0.1", "5.1.0"])
+
+        result = self._invoke([])
+        assert result.exit_code == 0
+        assert self.mock_run.call_args.kwargs["version"] == "6.0.1"
+
+    def test_check_honors_the_pin(self):
+        self._pin("5.1.0", ["6.0.1", "5.1.0"])
+
+        result = self._invoke(["check"])
+        assert result.exit_code == 0
+        assert self.mock_check.call_args.kwargs["version"] == "5.1.0"

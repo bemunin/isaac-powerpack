@@ -488,3 +488,28 @@ def test_resolve_installed_version_prefers_newest_known(tmp_path):
 
 def test_resolve_installed_version_falls_back_to_default(tmp_path):
     assert PowConfig.resolve_installed_version(tmp_path) == PowConfig.ISAACSIM_VERSION
+
+
+# ── system.toml [sim] default_version ───────────────────────────────────────────
+
+def test_configured_default_version_returns_pinned_value(tmp_path):
+    (tmp_path / "system.toml").write_text('[sim]\ndefault_version = " 5.1.0 "\n')
+
+    assert PowConfig.configured_default_version(tmp_path) == "5.1.0"
+
+
+def test_configured_default_version_without_system_toml(tmp_path):
+    assert PowConfig.configured_default_version(tmp_path) == ""
+
+
+def test_configured_default_version_without_sim_section(tmp_path):
+    (tmp_path / "system.toml").write_text('[asset]\nuse_local_asset = false\n')
+
+    assert PowConfig.configured_default_version(tmp_path) == ""
+
+
+def test_configured_default_version_ignores_malformed_toml(tmp_path):
+    """A corrupt system.toml must never break `pow sim`."""
+    (tmp_path / "system.toml").write_text("not = valid = toml\n")
+
+    assert PowConfig.configured_default_version(tmp_path) == ""

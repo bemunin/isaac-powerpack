@@ -17,6 +17,16 @@ All notable changes to the `pow-cli` package will be documented in this file.
   and the matching `IsaacSim-<version>` ROS workspace ref cloned during setup.
 - `pow sim` / `pow sim check` default `-v` to the Isaac Sim version actually
   installed under `.pow/isaacsim/` instead of a fixed constant.
+- **`[sim] default_version` in `~/.pow/system.toml`** — pin the version `pow sim`
+  and `pow sim check` use when `-v` is omitted. Resolution order is `-v`, then
+  this key, then the newest version installed under `.pow/isaacsim/`; an empty
+  value means auto-detect. A pinned version that is not installed prints a
+  warning and falls back to the newest installed one. New `system.toml` files
+  are created with the key present and empty; existing files are left untouched
+  and read as unset.
+- `pow sim --help` now lists the options bare `pow sim` accepts (`-v/--version`,
+  `--ros`, `--no-ros`), which previously showed up only under
+  `pow sim launch --help`.
 - **`pow sim check`** — run the Isaac Sim compatibility check from the managed
   installation (`.pow/isaacsim/<version>/isaac-sim.compatibility_check.sh`), with
   `-v/--version` to pick the version. Needs no project and no extra pip

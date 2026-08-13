@@ -8,12 +8,28 @@ from ..core.runner import Runner
 
 
 def _default_sim_version() -> str:
-    """Version used when ``-v`` is omitted: whatever is actually installed.
+    """Version used when ``-v`` is omitted.
 
-    click evaluates a callable default at parse time, so the scan of
-    ``<global>/isaacsim`` happens per invocation rather than at import.
+    Precedence: ``[sim] default_version`` in ``<global>/system.toml``, then
+    whatever is actually installed (the newest when several are).  click
+    evaluates a callable default at parse time, so both the file read and the
+    scan of ``<global>/isaacsim`` happen per invocation rather than at import.
     """
-    return PowConfig.resolve_installed_version()
+    pinned = PowConfig.configured_default_version()
+    if not pinned:
+        return PowConfig.resolve_installed_version()
+
+    installed = PowConfig.installed_versions()
+    # With nothing installed at all, honour the pin so the Runner's own
+    # "not found" error names the version the user asked for.
+    if installed and pinned not in installed:
+        fallback = PowConfig.resolve_installed_version()
+        console.print(
+            f"[yellow]⚠[/yellow]  system.toml pins Isaac Sim {pinned}, which is "
+            f"not installed; using {fallback}."
+        )
+        return fallback
+    return pinned
 
 
 def _guarded(action, **kwargs):
@@ -42,6 +58,29 @@ class SimGroup(click.Group):
         launch = self.get_command(ctx, "launch")
         return launch.name, launch, args
 
+    def format_options(self, ctx, formatter):
+        """List `launch`'s options as the group's own.
+
+        Bare `pow sim` accepts them through :meth:`resolve_command`, so they
+        belong in `pow sim --help` too - declared once, on `launch_cmd`.
+        """
+        launch = self.get_command(ctx, "launch")
+        rows = []
+        for param in launch.get_params(ctx):
+            if param.name == "help":
+                continue
+            record = param.get_help_record(ctx)
+            if record is not None:
+                rows.append(record)
+        for param in self.get_params(ctx):
+            record = param.get_help_record(ctx)
+            if record is not None:
+                rows.append(record)
+        if rows:
+            with formatter.section("Options"):
+                formatter.write_dl(rows)
+        self.format_commands(ctx, formatter)
+
 
 @click.group(
     name="sim",
@@ -55,9 +94,14 @@ def sim_group(ctx: click.Context):
 
     \b
     Unlike `pow run` this needs no project: no pyproject.toml is required and
-    pow.toml is never read. The version defaults to whatever is installed under
-    .pow/isaacsim/ (the newest when several are). Every unrecognized argument is
-    forwarded verbatim to .pow/isaacsim/<version>/isaac-sim.sh.
+    pow.toml is never read. Every unrecognized argument is forwarded verbatim
+    to .pow/isaacsim/<version>/isaac-sim.sh.
+
+    \b
+    The version is resolved in this order:
+      1. the -v/--version option
+      2. [sim] default_version in .pow/system.toml
+      3. the newest version installed under .pow/isaacsim/
 
     \b
     Subcommands:
@@ -68,6 +112,7 @@ def sim_group(ctx: click.Context):
     Examples:
       pow sim
       pow sim --no-ros
+      pow sim -v 5.1.0
       pow sim -- --no-window --/renderer/enabled=gpu
       pow sim check
     """
@@ -89,7 +134,7 @@ def sim_group(ctx: click.Context):
     "--version",
     "sim_version",
     default=_default_sim_version,
-    show_default="the installed version",
+    show_default="system.toml, else the installed version",
     help="Isaac Sim version to run.",
 )
 @click.option(
@@ -126,7 +171,7 @@ def launch_cmd(ctx: click.Context, sim_version: str, ros_bridge: str, no_ros: bo
     "--version",
     "sim_version",
     default=_default_sim_version,
-    show_default="the installed version",
+    show_default="system.toml, else the installed version",
     help="Isaac Sim version to check.",
 )
 @click.pass_context

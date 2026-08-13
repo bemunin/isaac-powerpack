@@ -49,6 +49,34 @@ raw_args = ["--/renderer/raytracingMotion/enabled=false"]
 
 ---
 
+## Global Settings (`~/.pow/system.toml`)
+
+`pow init` also creates `~/.pow/system.toml`, which holds settings shared by every project on the machine:
+
+```toml
+[asset]
+use_local_asset = false
+local_asset_path = ""
+
+[sim]
+default_version = ""
+```
+
+| Section   | Key                | Type     | Default | Description |
+|:----------|:-------------------|:---------|:--------|:------------|
+| `[sim]`   | `default_version`  | `string` | `""`    | Isaac Sim version used by `pow sim` and `pow sim check` when `-v` is omitted. Empty means auto-detect the newest version installed under `.pow/isaacsim/`. |
+| `[asset]` | `use_local_asset`  | `bool`   | `false` | Managed by `pow asset attach` / `pow asset detach` — do not edit by hand. |
+| `[asset]` | `local_asset_path` | `string` | `""`    | Managed by `pow asset attach` / `pow asset detach` — do not edit by hand. |
+
+`default_version` is the one key meant to be edited directly. Set it when several Isaac Sim versions are installed and you normally work with one that is not the newest:
+
+```toml
+[sim]
+default_version = "5.1.0"
+```
+
+`-v` on the command line still wins over it, and if the pinned version is not installed `pow sim` warns and falls back to the newest installed version. This is separate from `[sim] version` in a project's `pow.toml`, which is what `pow run` uses — `pow sim` never reads `pow.toml`.
+
 ## Custom ROS Image
 
 By default, `pow init` builds a bundled ROS 2 Jazzy image tagged

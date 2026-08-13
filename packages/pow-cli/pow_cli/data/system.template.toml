@@ -6,3 +6,8 @@ use_local_asset = false
 # The absolute path to the currently attached local asset directory.
 # This will be populated when an asset folder is attached.
 local_asset_path = ""
+
+[sim]
+# Isaac Sim version used by 'pow sim' when '-v' is omitted.
+# Leave empty to auto-detect the newest installed version.
+default_version = ""

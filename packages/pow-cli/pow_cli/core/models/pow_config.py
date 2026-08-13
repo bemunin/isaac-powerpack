@@ -176,6 +176,22 @@ class PowConfig:
         return known + unknown
 
     @classmethod
+    def configured_default_version(cls, global_path: Optional[Path] = None) -> str:
+        """``[sim] default_version`` from system.toml, or "" when unset.
+
+        A missing, unreadable or malformed system.toml must never break
+        ``pow sim``, so every failure reads as "no preference configured".
+        """
+        from .system_config import SystemConfig
+
+        base = cls.resolve_global_path() if global_path is None else global_path
+        path = base / "system.toml"
+        try:
+            return SystemConfig.from_file(path).sim.default_version
+        except (OSError, tomllib.TOMLDecodeError):
+            return ""
+
+    @classmethod
     def resolve_installed_version(cls, global_path: Optional[Path] = None) -> str:
         """Default Isaac Sim version for commands that take ``-v``.
 
