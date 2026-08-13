@@ -8,9 +8,10 @@ from rich.panel import Panel
 from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
 from rich.prompt import Confirm
 
-from ..common.prompt import ask_path
+from ..common.prompt import ask_choice, ask_path
 from ..common.utils import console
 from ..core.initializer import Initializer
+from ..core.models.pow_config import PowConfig
 from ..core.ros_manager import RosManager
 
 
@@ -126,9 +127,61 @@ def _step3_global_folder(initializer: Initializer, global_path):
         )
 
 
-def _step4_download_isaacsim(initializer: Initializer) -> dict | None:
+def _version_choices() -> list[tuple[str, str]]:
+    """Installable versions, latest first, annotated for the picker."""
+    installed = set(PowConfig.installed_versions())
+    latest = PowConfig.SUPPORTED_ISAACSIM_VERSIONS[0]
+
+    choices = []
+    for version in PowConfig.SUPPORTED_ISAACSIM_VERSIONS:
+        notes = []
+        if version == latest:
+            notes.append("latest")
+        if version in installed:
+            notes.append("installed")
+        choices.append((version, ", ".join(notes)))
+    return choices
+
+
+def _resolve_sim_version(flag_version: str | None, config_version: str | None) -> str:
+    """Decide which Isaac Sim version to install.
+
+    Precedence: ``--sim-version`` flag, then ``[sim] version`` from an existing
+    pow.toml the user chose to keep, then an interactive prompt.
+    """
+    if flag_version:
+        console.print(
+            f"   Using version from --sim-version: [bold green]{flag_version}[/bold green]"
+        )
+        return flag_version
+
+    if config_version:
+        if config_version not in PowConfig.SUPPORTED_ISAACSIM_VERSIONS:
+            raise click.ClickException(
+                f"Unsupported Isaac Sim version '{config_version}' in pow.toml. "
+                f"Supported versions: {', '.join(PowConfig.SUPPORTED_ISAACSIM_VERSIONS)}."
+            )
+        console.print(
+            f"   Using version from pow.toml: [bold green]{config_version}[/bold green]"
+        )
+        return config_version
+
+    return ask_choice(
+        "Select Isaac Sim version",
+        _version_choices(),
+        default=PowConfig.ISAACSIM_VERSION,
+    )
+
+
+def _step4_download_isaacsim(
+    initializer: Initializer,
+    flag_version: str | None = None,
+    config_version: str | None = None,
+) -> dict | None:
     """Download Isaac Sim with a Rich progress bar. Returns result dict or None on error."""
-    console.print("[bold blue][4/10] 📦 Isaac Sim App:[/bold blue] Installing Isaac Sim 5.1.0...")
+    console.print("[bold blue][4/10] 📦 Isaac Sim App:[/bold blue] Select a version to install")
+    version = _resolve_sim_version(flag_version, config_version)
+    console.print(f"   Installing Isaac Sim [bold]{version}[/bold]...")
 
     result = None
     error = None
@@ -147,7 +200,7 @@ def _step4_download_isaacsim(initializer: Initializer) -> dict | None:
         refresh_per_second=10,
     ) as progress:
         download_task = progress.add_task(
-            "download", filename="isaac-sim-5.1.0.zip", total=None, speed="0 MB/s"
+            "download", filename=f"isaac-sim-{version}.zip", total=None, speed="0 MB/s"
         )
         extract_task = progress.add_task(
             "extract", filename="", total=None, speed=" ", visible=False
@@ -178,7 +231,7 @@ def _step4_download_isaacsim(initializer: Initializer) -> dict | None:
                 progress.update(download_task, visible=False)
                 progress.update(
                     extract_task,
-                    filename="isaac-sim-5.1.0 [yellow](Extracting...)[/yellow]",
+                    filename=f"isaac-sim-{version} [yellow](Extracting...)[/yellow]",
                     speed=" ",
                     completed=0,
                     total=None,
@@ -189,12 +242,13 @@ def _step4_download_isaacsim(initializer: Initializer) -> dict | None:
             elif status == "Extracted":
                 progress.update(
                     extract_task,
-                    filename="isaac-sim-5.1.0 [green](Extracted → 5.1.0)[/green]",
+                    filename=f"isaac-sim-{version} [green](Extracted → {version})[/green]",
                 )
                 time.sleep(1)
 
         try:
             result = initializer.download_isaacsim(
+                version=version,
                 progress_callback=progress_callback,
                 status_callback=status_callback,
             )
@@ -205,9 +259,10 @@ def _step4_download_isaacsim(initializer: Initializer) -> dict | None:
     if error:
         console.print(f"   [bold red]❌ Error:[/bold red] {error}")
         return None
+    result.setdefault("version", version)
     if result["status"] == "Already installed":
         console.print(
-            f"   [yellow]✔[/yellow] Isaac Sim 5.1.0 is already installed at [dim]{result['path']}[/dim]"
+            f"   [yellow]✔[/yellow] Isaac Sim {version} is already installed at [dim]{result['path']}[/dim]"
         )
     else:
         console.print(
@@ -232,6 +287,7 @@ def _step6_ros_integration(
     global_dir_name: str,
     forced_value: bool | None = None,
     forced_ws: str | None = None,
+    sim_version: str | None = None,
 ) -> tuple[bool, str]:
     """Prompt for ROS integration and set it up.
 
@@ -295,6 +351,7 @@ def _step6_ros_integration(
             ros_res = ros_mgr.setup_ros_workspace(
                 status_callback=ros_status_callback,
                 ws_path=resolved_ws,
+                sim_version=sim_version,
             )
         except Exception as e:
             ros_setup_failed = True
@@ -305,7 +362,10 @@ def _step6_ros_integration(
         raise SystemExit(1)
 
     if ros_cloned:
-        console.print(f"   [green]✔[/green] Cloned IsaacSim-ros_workspaces to [dim]{display_path}[/dim]")
+        console.print(
+            f"   [green]✔[/green] Cloned IsaacSim-ros_workspaces "
+            f"([bold]{ros_res['ws_ref']}[/bold]) to [dim]{display_path}[/dim]"
+        )
     else:
         console.print(f"   [yellow]✔[/yellow] IsaacSim-ros_workspaces already available in [dim]{display_path}[/dim]")
 
@@ -404,12 +464,17 @@ def _step7_project_structure(initializer: Initializer):
         console.print("   [yellow]✔[/yellow] .gitignore already exists. [dim]Kept existing.[/dim]")
 
 
-def _step8_project_link(initializer: Initializer):
+def _step8_project_link(initializer: Initializer, sim_version: str | None = None):
     """Symlink managed Isaac Sim to local project."""
     console.print("[bold blue][8/10] 🔗 Project Link:[/bold blue] Linking Isaac Sim to project...")
-    result = initializer.link_managed_isaacsim()
+    result = initializer.link_managed_isaacsim(version=sim_version)
     if result["status"] == "Created":
         console.print(f"   [green]✔[/green] Created symlink: [dim]{result['path']}[/dim]")
+    elif result["status"] == "Repointed":
+        console.print(
+            f"   [green]✔[/green] Re-pointed symlink [dim]{result['path']}[/dim] "
+            f"to Isaac Sim {sim_version} [dim](was {result['previous']})[/dim]"
+        )
     elif result["status"] == "Existed":
         console.print(f"   [yellow]✔[/yellow] Symlink already exists: [dim]{result['path']}[/dim]")
     elif result["status"] == "Error":
@@ -433,6 +498,7 @@ def _step10_finalize(
     override_pow_toml: bool,
     ros_enabled: bool,
     isaacsim_ros_ws: str = "~/IsaacSim-ros_workspaces",
+    sim_version: str | None = None,
 ):
     """Generate pow.toml configuration."""
 
@@ -453,6 +519,7 @@ def _step10_finalize(
         override=override_pow_toml,
         enable_ros=ros_enabled,
         isaacsim_ros_ws=isaacsim_ros_ws,
+        sim_version=sim_version,
     )
     if result["status"] == "Created":
         console.print("   [green]✔[/green] Created pow.toml (from template)")
@@ -465,8 +532,20 @@ def _step10_finalize(
 # ── Command entry point ───────────────────────────────────────────────────────
 
 @click.command(name="init")
-def init_cmd():
-    """Initialize Isaac Sim project."""
+@click.option(
+    "--sim-version",
+    "sim_version",
+    type=click.Choice(PowConfig.SUPPORTED_ISAACSIM_VERSIONS),
+    default=None,
+    help="Isaac Sim version to install. Skips the interactive prompt.",
+)
+def init_cmd(sim_version: str | None):
+    """Initialize Isaac Sim project.
+
+    \b
+    The Isaac Sim version comes from --sim-version, then from `[sim] version`
+    in an existing pow.toml you chose to keep, then from an interactive prompt.
+    """
     initializer = Initializer()
     config = initializer.get_config_path()
     global_dir_name = config["global_dir_name"]
@@ -485,30 +564,41 @@ def init_cmd():
     override_pow_toml = _step2_check_existing_config(initializer)
     _step3_global_folder(initializer, global_path)
 
-    download_result = _step4_download_isaacsim(initializer)
-    if download_result is None:
-        return
-
-    _step5_optimization(initializer, download_result["path"])
-    
-    # Use existing ROS setting if not overriding pow.toml
+    # Reuse settings from an existing pow.toml the user chose to keep.
     ros_forced = None
     ros_ws_forced = None
+    version_forced = None
     if not override_pow_toml:
         try:
             ros_forced = initializer.config.get("enable_ros", False)
             ros_ws_forced = initializer.config.get("isaacsim_ros_ws", None)
+            version_forced = initializer.config.get("version", None)
         except Exception:
             pass
 
+    download_result = _step4_download_isaacsim(
+        initializer, flag_version=sim_version, config_version=version_forced,
+    )
+    if download_result is None:
+        return
+
+    resolved_version = download_result["version"]
+
+    _step5_optimization(initializer, download_result["path"])
+
     ros_enabled, isaacsim_ros_ws = _step6_ros_integration(
-        initializer, global_dir_name, forced_value=ros_forced, forced_ws=ros_ws_forced,
+        initializer, global_dir_name,
+        forced_value=ros_forced, forced_ws=ros_ws_forced,
+        sim_version=resolved_version,
     )
     _step7_project_structure(initializer)
-    _step8_project_link(initializer)
+    _step8_project_link(initializer, sim_version=resolved_version)
     _step9_vscode_setup(initializer)
 
-    _step10_finalize(initializer, override_pow_toml, ros_enabled, isaacsim_ros_ws)
+    _step10_finalize(
+        initializer, override_pow_toml, ros_enabled, isaacsim_ros_ws,
+        sim_version=resolved_version,
+    )
 
     console.print(
         Panel(

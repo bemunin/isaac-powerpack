@@ -69,6 +69,13 @@ class Initializer:
     def _data_path(filename: str) -> Path:
         return Path(__file__).parent.parent / "data" / filename
 
+    def _configured_version(self) -> str:
+        """Isaac Sim version from pow.toml, or the default when unavailable."""
+        try:
+            return self.config.get("version", PowConfig.ISAACSIM_VERSION)
+        except Exception:
+            return PowConfig.ISAACSIM_VERSION
+
     # ── Public API ────────────────────────────────────────────────────────────
 
     def get_config_path(self):
@@ -82,14 +89,20 @@ class Initializer:
         """Get the PowConfig object representing pow.toml."""
         return self.config
 
-    def get_isaacsim_path(self) -> Path | None:
+    def get_isaacsim_path(self, version: str | None = None) -> Path | None:
         """Resolve the Isaac Sim installation path.
 
         Checks the managed .pow/isaacsim/<version> folder first, then falls
         back to importing the ``isaacsim`` Python package. Returns None if
         Isaac Sim cannot be located.
+
+        Args:
+            version: Isaac Sim version to look for.  Defaults to the version
+                     in pow.toml, then to :attr:`PowConfig.ISAACSIM_VERSION`.
         """
-        managed = self.config.global_path / "isaacsim" / PowConfig.ISAACSIM_VERSION
+        managed = PowConfig.version_dir(
+            version or self._configured_version(), self.config.global_path
+        )
         if managed.is_dir():
             return managed
 
@@ -179,22 +192,39 @@ class Initializer:
             return True
         return False
 
-    def download_isaacsim(self, progress_callback=None, status_callback=None, mock=False):
-        """Download and install Isaac Sim."""
+    def download_isaacsim(
+        self,
+        version: str | None = None,
+        progress_callback=None,
+        status_callback=None,
+        mock=False,
+    ):
+        """Download and install Isaac Sim.
+
+        Args:
+            version: Version to install.  Must be one of
+                     :attr:`PowConfig.SUPPORTED_ISAACSIM_VERSIONS`; defaults to
+                     :attr:`PowConfig.ISAACSIM_VERSION`.
+        """
         self._check_platform()
+
+        version = version or PowConfig.ISAACSIM_VERSION
+        release = PowConfig.release(version)
 
         dest_dir = self.config.global_path / "isaacsim"
         dest_dir.mkdir(parents=True, exist_ok=True)
-        zip_path = dest_dir / PowConfig.ISAACSIM_FILENAME
-        target_folder = dest_dir / PowConfig.ISAACSIM_VERSION
+        zip_path = dest_dir / release["filename"]
+        target_folder = PowConfig.version_dir(version, self.config.global_path)
 
         if not mock and target_folder.exists():
-            return {"status": "Already installed", "path": str(target_folder)}
+            return {"status": "Already installed", "path": str(target_folder), "version": version}
 
-        self._download_isaacsim_zip(zip_path, progress_callback, status_callback, mock)
+        self._download_isaacsim_zip(
+            release["url"], zip_path, progress_callback, status_callback, mock
+        )
         self._extract_isaacsim_zip(zip_path, target_folder, progress_callback, status_callback, mock)
 
-        return {"status": "Downloaded and installed", "path": str(target_folder)}
+        return {"status": "Downloaded and installed", "path": str(target_folder), "version": version}
 
     def setup_project_structure(self, local_folders: list) -> dict:
         """Create project folders and .gitignore from template."""
@@ -221,18 +251,39 @@ class Initializer:
 
         return {"results": results}
 
-    def link_managed_isaacsim(self) -> dict:
-        """Symlink global managed Isaac Sim to project's _isaacsim."""
-        version = PowConfig.ISAACSIM_VERSION
-        global_isaacsim = self.config.global_path / "isaacsim" / version
+    def link_managed_isaacsim(self, version: str | None = None) -> dict:
+        """Symlink global managed Isaac Sim to project's _isaacsim.
+
+        Re-points an existing symlink when it does not already resolve to
+        *version*, so switching versions with ``pow init`` does not leave the
+        project pointing at the previous install.  A real file or directory at
+        ``_isaacsim`` is never deleted - that would destroy data the user may
+        have put there deliberately - and is reported as an error instead.
+        """
+        version = version or self._configured_version()
+        global_isaacsim = PowConfig.version_dir(version, self.config.global_path)
 
         if not global_isaacsim.is_dir():
             return {"status": "Error", "message": f"Global Isaac Sim {version} not found."}
 
         target_link = Path("_isaacsim")
 
-        if target_link.exists() or target_link.is_symlink():
-            return {"status": "Existed", "path": str(target_link)}
+        if target_link.is_symlink():
+            current = target_link.readlink()
+            if current == global_isaacsim:
+                return {"status": "Existed", "path": str(target_link)}
+            target_link.unlink()
+            target_link.symlink_to(global_isaacsim, target_is_directory=True)
+            return {"status": "Repointed", "path": str(target_link), "previous": str(current)}
+
+        if target_link.exists():
+            return {
+                "status": "Error",
+                "message": (
+                    f"'{target_link}' exists and is not a symlink. "
+                    "Remove or rename it, then re-run `pow init`."
+                ),
+            }
 
         target_link.symlink_to(global_isaacsim, target_is_directory=True)
         return {"status": "Created", "path": str(target_link)}
@@ -338,6 +389,7 @@ class Initializer:
         override: bool = False,
         enable_ros: bool = False,
         isaacsim_ros_ws: str = "~/IsaacSim-ros_workspaces",
+        sim_version: str | None = None,
     ) -> dict:
         """Copy pow.template.toml to pow.toml and patch settings from user choices."""
         # Initialize git if not already done
@@ -357,6 +409,7 @@ class Initializer:
             pow_toml_path,
             enable_ros=enable_ros,
             isaacsim_ros_ws=isaacsim_ros_ws,
+            sim_version=sim_version,
         )
 
         return {"status": "Created", "path": str(pow_toml_path)}
@@ -394,8 +447,13 @@ class Initializer:
                     except OSError:
                         pass
 
-    def _download_isaacsim_zip(self, zip_path, progress_callback, status_callback, mock):
-        """Download the Isaac Sim zip archive."""
+    def _download_isaacsim_zip(self, url, zip_path, progress_callback, status_callback, mock):
+        """Download the Isaac Sim zip archive.
+
+        Downloads to ``<name>.part`` and renames on success, so a run
+        interrupted part-way through a multi-gigabyte download never leaves a
+        truncated file that the next run would mistake for a complete archive.
+        """
         if not mock and zip_path.exists():
             if status_callback:
                 status_callback("Skipped download")
@@ -416,11 +474,12 @@ class Initializer:
                 if progress_callback:
                     progress_callback(blocknum * blocksize, totalsize)
 
+            part_path = zip_path.with_name(zip_path.name + ".part")
             try:
-                urllib.request.urlretrieve(PowConfig.ISAACSIM_URL, zip_path, reporthook)
+                urllib.request.urlretrieve(url, part_path, reporthook)
+                os.replace(part_path, zip_path)
             except Exception as e:
-                if zip_path.exists():
-                    zip_path.unlink()
+                part_path.unlink(missing_ok=True)
                 raise RuntimeError(f"Download failed: {e}")
 
     def _extract_isaacsim_zip(self, zip_path, target_folder, progress_callback, status_callback, mock):
@@ -449,16 +508,24 @@ class Initializer:
                 for i, info in enumerate(members):
                     if progress_callback and i % 50 == 0:
                         progress_callback(i, total_files)
-                    extracted = target_folder / info.filename
-                    zip_ref.extract(info, target_folder)
-                    # Restore Unix permissions stored in the zip (upper 16 bits of external_attr)
-                    unix_mode = (info.external_attr >> 16) & 0xFFFF
+                    # extract() sanitises the member name and returns the path it
+                    # actually wrote; recomputing it from info.filename would let a
+                    # crafted archive point the chmod below outside target_folder.
+                    extracted = Path(zip_ref.extract(info, target_folder))
+                    # Restore Unix permissions stored in the zip (upper 16 bits of
+                    # external_attr), masked to rwx bits so archived setuid/setgid
+                    # bits are never applied.
+                    unix_mode = (info.external_attr >> 16) & 0o777
                     if unix_mode and extracted.exists():
                         extracted.chmod(unix_mode)
                 if progress_callback:
                     progress_callback(total_files, total_files)
             if status_callback:
                 status_callback("Extracted")
+
+            # Zips built without Unix mode bits leave everything non-executable,
+            # which would make post_install.sh below fail with EACCES.
+            self._fix_isaacsim_permissions(target_folder)
 
             # Run post_install.sh if it exists
             post_install_script = target_folder / "post_install.sh"
@@ -479,23 +546,27 @@ class Initializer:
         pow_toml_path: Path,
         enable_ros: bool,
         isaacsim_ros_ws: str = "~/IsaacSim-ros_workspaces",
+        sim_version: str | None = None,
     ):
         """Patch values in pow.toml to reflect user choices made during init."""
         content = pow_toml_path.read_text()
-        
+
         doc = tomlkit.parse(content)
-        
+
+        patch = {
+            "version": sim_version or PowConfig.ISAACSIM_VERSION,
+            "enable_ros": enable_ros,
+            "isaacsim_ros_ws": isaacsim_ros_ws,
+        }
+
         # We ensure the top-level [sim] section is present or patch it.
-        # Since the template already has [sim], we just update enable_ros within it.
+        # Since the template already has [sim], we just update the keys within it.
         if "sim" in doc and isinstance(doc["sim"], dict):
-            doc["sim"]["enable_ros"] = enable_ros
-            doc["sim"]["isaacsim_ros_ws"] = isaacsim_ros_ws
+            for key, value in patch.items():
+                doc["sim"][key] = value
         else:
-            doc["sim"] = {
-                "enable_ros": enable_ros,
-                "isaacsim_ros_ws": isaacsim_ros_ws,
-            }
-            
+            doc["sim"] = patch
+
         pow_toml_path.write_text(tomlkit.dumps(doc))
 
     def setup_omniverse_user_home_alias(self) -> dict:

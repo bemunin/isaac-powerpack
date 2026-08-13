@@ -1,8 +1,10 @@
 import os
+from contextlib import contextmanager
 
 import pytest
 
-from pow_cli.common.prompt import _path_completion, ask_path, complete_path
+from pow_cli.common import prompt as prompt_module
+from pow_cli.common.prompt import _path_completion, ask_choice, ask_path, complete_path
 
 
 @pytest.fixture
@@ -196,3 +198,149 @@ def test_ask_path_prompt_is_passed_to_input(monkeypatch):
 
     assert "Path to clone" in seen["prompt"]
     assert "~/IsaacSim-ros_workspaces" in seen["prompt"]
+
+
+# ── ask_choice ──────────────────────────────────────────────────────────────────
+
+CHOICES = [("6.0.1", "latest"), ("5.1.0", "installed")]
+
+
+@pytest.fixture
+def keys(monkeypatch):
+    """Drive the picker from a scripted key sequence."""
+    def script(*presses):
+        pressed = iter(presses)
+        monkeypatch.setattr(prompt_module, "_is_interactive", lambda: True)
+        monkeypatch.setattr(prompt_module, "_cbreak_mode", _noop_cbreak)
+        monkeypatch.setattr(prompt_module, "_read_key", lambda _fd: next(pressed))
+    return script
+
+
+@contextmanager
+def _noop_cbreak():
+    """Stand in for the real termios juggling, which needs a tty."""
+    yield 0
+
+
+def test_ask_choice_returns_default_on_enter(keys):
+    keys("enter")
+
+    assert ask_choice("Pick", CHOICES, default="6.0.1") == "6.0.1"
+
+
+def test_ask_choice_starts_the_cursor_on_the_default(keys):
+    """Enter with no movement returns the default, not the first entry."""
+    keys("enter")
+
+    assert ask_choice("Pick", CHOICES, default="5.1.0") == "5.1.0"
+
+
+def test_ask_choice_moves_down(keys):
+    keys("down", "enter")
+
+    assert ask_choice("Pick", CHOICES, default="6.0.1") == "5.1.0"
+
+
+def test_ask_choice_wraps_around_both_ends(keys):
+    keys("up", "enter")
+
+    assert ask_choice("Pick", CHOICES, default="6.0.1") == "5.1.0"
+
+    keys("down", "down", "enter")
+
+    assert ask_choice("Pick", CHOICES, default="6.0.1") == "6.0.1"
+
+
+def test_ask_choice_ignores_unknown_keys(keys):
+    keys("", "down", "", "enter")
+
+    assert ask_choice("Pick", CHOICES, default="6.0.1") == "5.1.0"
+
+
+def test_ask_choice_aborts(keys):
+    keys("abort")
+
+    with pytest.raises(KeyboardInterrupt):
+        ask_choice("Pick", CHOICES, default="6.0.1")
+
+
+def test_ask_choice_restores_the_cursor_after_an_abort(keys, mocker):
+    """An abort must not leave the terminal without a cursor."""
+    keys("abort")
+    show_cursor = mocker.patch.object(prompt_module.console, "show_cursor")
+
+    with pytest.raises(KeyboardInterrupt):
+        ask_choice("Pick", CHOICES, default="6.0.1")
+
+    assert show_cursor.call_args_list[-1].args == (True,)
+
+
+def test_ask_choice_unknown_default_starts_at_the_first_entry(keys):
+    keys("enter")
+
+    assert ask_choice("Pick", CHOICES, default="9.9.9") == "6.0.1"
+
+
+def test_ask_choice_rejects_an_empty_choice_list():
+    with pytest.raises(ValueError):
+        ask_choice("Pick", [])
+
+
+# ── ask_choice: non-interactive fallback ────────────────────────────────────────
+
+def test_ask_choice_falls_back_to_a_typed_prompt(monkeypatch):
+    """Piped stdin / CI / the click runner must not hit the raw-terminal path."""
+    monkeypatch.setattr(prompt_module, "_is_interactive", lambda: False)
+
+    def boom(_fd):  # pragma: no cover - the point is that it is never reached
+        raise AssertionError("_read_key must not run without a terminal")
+
+    monkeypatch.setattr(prompt_module, "_read_key", boom)
+    monkeypatch.setattr("builtins.input", lambda prompt="": "5.1.0")
+
+    assert ask_choice("Pick", CHOICES, default="6.0.1") == "5.1.0"
+
+
+def test_ask_choice_fallback_offers_values_in_display_order(monkeypatch, mocker):
+    monkeypatch.setattr(prompt_module, "_is_interactive", lambda: False)
+    ask = mocker.patch.object(prompt_module.Prompt, "ask", return_value="6.0.1")
+
+    ask_choice("Pick", CHOICES, default="6.0.1")
+
+    assert ask.call_args.kwargs["choices"] == ["6.0.1", "5.1.0"]
+    assert ask.call_args.kwargs["default"] == "6.0.1"
+
+
+# ── ask_choice: key decoding ────────────────────────────────────────────────────
+
+@pytest.mark.parametrize(
+    "sequence,expected",
+    [
+        (b"\x1b[A", "up"),
+        (b"\x1b[B", "down"),
+        (b"\x1bOA", "up"),
+        (b"\x1bOB", "down"),
+        (b"\r", "enter"),
+        (b"\n", "enter"),
+        (b"k", "up"),
+        (b"j", "down"),
+        (b"\x03", "abort"),
+        (b"\x04", "abort"),
+        (b"\x1b", "abort"),
+        (b"q", "abort"),
+        (b"z", ""),
+        (b"\x1b[C", ""),
+    ],
+)
+def test_read_key_decodes_sequences(sequence, expected, monkeypatch):
+    """An escape sequence arrives as one read, so Esc is unambiguous."""
+    monkeypatch.setattr(prompt_module.os, "read", lambda _fd, _n: sequence)
+
+    assert prompt_module._read_key(0) == expected
+
+
+def test_read_key_treats_eof_as_abort(monkeypatch):
+    """A vanished terminal must abort, not spin on empty reads."""
+    monkeypatch.setattr(prompt_module.os, "read", lambda _fd, _n: b"")
+
+    assert prompt_module._read_key(0) == "abort"

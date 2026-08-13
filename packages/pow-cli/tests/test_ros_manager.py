@@ -136,13 +136,15 @@ def test_image_exists_keeps_explicit_tag(mocker):
 
 # ── isaacsim_bridge_env ─────────────────────────────────────────────────────────
 
-def _make_bridge_config(tmp_path, bridge_distro="humble", version="5.1.0"):
+def _make_bridge_config(
+    tmp_path, bridge_distro="humble", version="5.1.0", ext="isaacsim.ros2.bridge",
+):
     """MagicMock PowConfig with an Isaac Sim install containing bridge libs."""
     cfg = MagicMock()
     cfg.global_path = tmp_path
     cfg.get_ros_bridge.return_value = bridge_distro
     cfg.get.return_value = version
-    lib = tmp_path / "isaacsim" / version / "exts" / "isaacsim.ros2.bridge" / bridge_distro / "lib"
+    lib = tmp_path / "isaacsim" / version / "exts" / ext / bridge_distro / "lib"
     lib.mkdir(parents=True)
     return cfg, lib
 
@@ -220,7 +222,7 @@ def test_isaacsim_bridge_env_missing_libs_raises(tmp_path, mocker):
     cfg.get.return_value = "5.1.0"
     mocker.patch.dict("os.environ", {}, clear=True)
 
-    with pytest.raises(click.ClickException, match="bridge libs not found"):
+    with pytest.raises(click.ClickException, match="ROS2 libs for 'humble' not found"):
         RosManager.isaacsim_bridge_env(cfg)
 
 
@@ -266,3 +268,74 @@ def test_start_new_container_uses_container_name(mocker):
     cmd = run_calls[0][0][0]
     assert cmd[cmd.index("--name") + 1] == "my_robot_sim"
 
+
+
+# ── ROS 2 library location across Isaac Sim releases ────────────────────────────
+
+def test_bridge_env_finds_ros2_core_ext(tmp_path, mocker):
+    """Isaac Sim 6.0 renamed isaacsim.ros2.bridge to isaacsim.ros2.core."""
+    isaacsim_dir = tmp_path / "isaacsim" / "6.0.1"
+    lib = isaacsim_dir / "exts" / "isaacsim.ros2.core" / "jazzy" / "lib"
+    lib.mkdir(parents=True)
+    mocker.patch.dict("os.environ", {}, clear=True)
+
+    env = RosManager.bridge_env(isaacsim_dir, "jazzy")
+
+    assert env["LD_LIBRARY_PATH"] == str(lib)
+
+
+def test_bridge_env_prefers_ros2_core_over_bridge(tmp_path, mocker):
+    """When both exist the newer extension name wins."""
+    isaacsim_dir = tmp_path / "isaacsim" / "6.0.1"
+    core_lib = isaacsim_dir / "exts" / "isaacsim.ros2.core" / "jazzy" / "lib"
+    bridge_lib = isaacsim_dir / "exts" / "isaacsim.ros2.bridge" / "jazzy" / "lib"
+    core_lib.mkdir(parents=True)
+    bridge_lib.mkdir(parents=True)
+    mocker.patch.dict("os.environ", {}, clear=True)
+
+    env = RosManager.bridge_env(isaacsim_dir, "jazzy")
+
+    assert env["LD_LIBRARY_PATH"] == str(core_lib)
+
+
+def test_isaacsim_bridge_env_reads_ros2_core_via_config(tmp_path, mocker):
+    cfg, lib = _make_bridge_config(
+        tmp_path, bridge_distro="jazzy", version="6.0.1", ext="isaacsim.ros2.core",
+    )
+    mocker.patch.dict("os.environ", {}, clear=True)
+
+    env = RosManager.isaacsim_bridge_env(cfg)
+
+    assert env["LD_LIBRARY_PATH"] == str(lib)
+
+
+# ── workspace ref tracks the Isaac Sim version ──────────────────────────────────
+
+@pytest.mark.parametrize(
+    "version,expected_ref",
+    [("5.1.0", "IsaacSim-5.1.0"), ("6.0.1", "IsaacSim-6.0.1")],
+)
+def test_setup_ros_workspace_clones_matching_ref(tmp_path, mocker, version, expected_ref):
+    cfg = MagicMock()
+    cfg.ros_distro = "jazzy"
+    cfg.ubuntu_version = "24.04"
+    run = mocker.patch("pow_cli.core.ros_manager.subprocess.run")
+
+    result = RosManager(config=cfg).setup_ros_workspace(
+        ws_path=tmp_path / "ws", sim_version=version,
+    )
+
+    cmd = run.call_args[0][0]
+    assert cmd[:4] == ["git", "clone", "-b", expected_ref]
+    assert result["ws_ref"] == expected_ref
+
+
+def test_setup_ros_workspace_rejects_unknown_version(tmp_path):
+    cfg = MagicMock()
+    cfg.ros_distro = "jazzy"
+    cfg.ubuntu_version = "24.04"
+
+    with pytest.raises(click.ClickException, match="Unsupported Isaac Sim version"):
+        RosManager(config=cfg).setup_ros_workspace(
+            ws_path=tmp_path / "ws", sim_version="9.9.9",
+        )

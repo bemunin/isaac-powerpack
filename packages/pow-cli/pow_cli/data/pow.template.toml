@@ -1,5 +1,5 @@
 [sim]
-version = "5.1.0"
+version = "6.0.1"
 ext_folders = ["./exts"]
 cpu_performance_mode = false
 headless = false

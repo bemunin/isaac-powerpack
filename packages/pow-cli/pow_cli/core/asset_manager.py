@@ -103,8 +103,14 @@ class AssetManager:
         return self.global_dir / "assets"
 
     def get_kit_path(self) -> Path:
+        """Path to the .kit experience file of the project's Isaac Sim install."""
+        try:
+            version = self._config.get("version", PowConfig.ISAACSIM_VERSION)
+        except RuntimeError:  # no pow.toml
+            version = PowConfig.resolve_installed_version(self.global_dir)
         return (
-            self.global_dir / "isaacsim" / "5.1.0" / "apps" / "isaacsim.exp.base.kit"
+            PowConfig.version_dir(version, self.global_dir)
+            / "apps" / "isaacsim.exp.base.kit"
         )
 
     # ── Configuration queries ─────────────────────────────────────────────────

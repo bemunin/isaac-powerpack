@@ -36,7 +36,7 @@ class RosManager:
 
         Clears host ROS environment that conflicts with Isaac Sim's bundled
         Python, then points ``LD_LIBRARY_PATH`` at the prebuilt bridge libs
-        shipped in ``exts/isaacsim.ros2.bridge/<distro>/lib``. The bridge
+        shipped in ``exts/isaacsim.ros2.core|bridge/<distro>/lib``. The bridge
         distro is read from ``ros_bridge`` in pow.toml (default
         ``jazzy``), resolved for the given *profile*.
 
@@ -45,9 +45,32 @@ class RosManager:
         one used by ROS 2 nodes running outside Isaac Sim.
         """
         isaacsim_version = config.get("version", PowConfig.ISAACSIM_VERSION)
-        isaacsim_dir = config.global_path / "isaacsim" / isaacsim_version
+        isaacsim_dir = PowConfig.version_dir(isaacsim_version, config.global_path)
         bridge_distro = config.get_ros_bridge(profile)
         return RosManager.bridge_env(isaacsim_dir, bridge_distro)
+
+    #: Extensions that ship the prebuilt ROS 2 libraries, newest naming first.
+    #: Isaac Sim 6.0 renamed ``isaacsim.ros2.bridge`` to ``isaacsim.ros2.core``;
+    #: probing both keeps a single code path working across releases.
+    _ROS2_LIB_EXTS = ("isaacsim.ros2.core", "isaacsim.ros2.bridge")
+
+    @staticmethod
+    def _find_bridge_lib(isaacsim_dir: Path, bridge_distro: str) -> Path:
+        """Locate the bundled ROS 2 library directory for *bridge_distro*."""
+        candidates = [
+            isaacsim_dir / "exts" / ext / bridge_distro / "lib"
+            for ext in RosManager._ROS2_LIB_EXTS
+        ]
+        for candidate in candidates:
+            if candidate.is_dir():
+                return candidate
+
+        listed = "\n".join(f"  - {c}" for c in candidates)
+        raise click.ClickException(
+            f"Isaac Sim ROS2 libs for '{bridge_distro}' not found. Looked in:\n"
+            f"{listed}\n"
+            "Run `pow init` to install Isaac Sim first."
+        )
 
     @staticmethod
     def bridge_env(isaacsim_dir: Path, bridge_distro: str) -> dict[str, str]:
@@ -76,12 +99,7 @@ class RosManager:
             if p and not p.startswith("/opt/ros/")
         ]
 
-        bridge_lib = isaacsim_dir / "exts" / "isaacsim.ros2.bridge" / bridge_distro / "lib"
-        if not bridge_lib.is_dir():
-            raise click.ClickException(
-                f"Isaac Sim ROS2 bridge libs not found at {bridge_lib}\n"
-                "Run `pow init` to install Isaac Sim first."
-            )
+        bridge_lib = RosManager._find_bridge_lib(isaacsim_dir, bridge_distro)
 
         ld_parts.append(str(bridge_lib))
         env["LD_LIBRARY_PATH"] = ":".join(ld_parts)
@@ -92,17 +110,31 @@ class RosManager:
 
     # ── Workspace setup (from Initializer) ───────────────────────────────────
 
-    def setup_ros_workspace(self, status_callback=None, ws_path: "Path | None" = None) -> dict:
+    def setup_ros_workspace(
+        self,
+        status_callback=None,
+        ws_path: "Path | None" = None,
+        sim_version: str | None = None,
+    ) -> dict:
         """Setup ROS workspace for Isaac Sim project.
 
         Args:
             ws_path: Explicit workspace path override.  When ``None`` the
                      path is read from ``self.config.ros_ws_path`` (i.e.
                      the ``isaacsim_ros_ws`` key in pow.toml).
+            sim_version: Isaac Sim version whose matching workspace ref should
+                     be cloned.  ``pow init`` passes this explicitly because
+                     pow.toml may not exist yet.
         """
         ros_distro = self.config.ros_distro
         ubuntu_version = self.config.ubuntu_version
         clone_path = ws_path or self.config.ros_ws_path
+        if sim_version is None:
+            try:
+                sim_version = self.config.get("version", PowConfig.ISAACSIM_VERSION)
+            except RuntimeError:  # no pow.toml yet
+                sim_version = PowConfig.ISAACSIM_VERSION
+        ws_ref = PowConfig.release(sim_version)["ros_ws_ref"]
 
         # Clone workspace if not already cloned
         if not (clone_path / ".git").exists():
@@ -110,7 +142,7 @@ class RosManager:
                 status_callback("cloning")
             subprocess.run(
                 [
-                    "git", "clone", "-b", "IsaacSim-5.1.0", "--quiet",
+                    "git", "clone", "-b", ws_ref, "--quiet",
                     "https://github.com/isaac-sim/IsaacSim-ros_workspaces.git",
                     str(clone_path),
                 ],
@@ -127,6 +159,7 @@ class RosManager:
             "ros_distro": ros_distro,
             "ubuntu_version": ubuntu_version,
             "path": str(clone_path),
+            "ws_ref": ws_ref,
         }
 
     @staticmethod

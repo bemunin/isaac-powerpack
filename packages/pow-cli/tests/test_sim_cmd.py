@@ -2,6 +2,7 @@ import pytest
 from click.testing import CliRunner
 
 from pow_cli.cli.sim import sim_group
+from pow_cli.core.models.pow_config import PowConfig
 
 
 @pytest.mark.cli
@@ -18,12 +19,24 @@ class TestSim:
             sim_group, args, env={"NO_COLOR": "1", "TERM": "dumb"}
         )
 
-    def test_bare_sim_uses_defaults(self):
+    def test_bare_sim_uses_defaults(self, mocker):
+        # Pin the auto-detected default; otherwise the assertion depends on
+        # what happens to be installed under ~/.pow/isaacsim on this machine.
+        mocker.patch.object(PowConfig, "resolve_installed_version", return_value="5.1.0")
+
         result = self._invoke([])
         assert result.exit_code == 0
         self.mock_run.assert_called_once_with(
             version="5.1.0", ros_bridge="jazzy", extra_args=[]
         )
+
+    def test_launch_default_version_follows_installed(self, mocker):
+        """-v defaults to whatever is installed, not a frozen constant."""
+        mocker.patch.object(PowConfig, "resolve_installed_version", return_value="6.0.1")
+
+        result = self._invoke(["--no-ros"])
+        assert result.exit_code == 0
+        assert self.mock_run.call_args.kwargs["version"] == "6.0.1"
 
     def test_no_ros_disables_bridge(self):
         result = self._invoke(["--no-ros"])

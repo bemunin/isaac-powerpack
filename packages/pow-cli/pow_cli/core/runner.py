@@ -85,8 +85,8 @@ class Runner:
     ) -> list[str]:
         """Build the Isaac Sim launch command from configuration."""
         isaacsim_version = config.get("version", PowConfig.ISAACSIM_VERSION)
-        isaacsim_dir = config.global_path / "isaacsim" / isaacsim_version
-        
+        isaacsim_dir = PowConfig.version_dir(isaacsim_version, config.global_path)
+
         launch_script = isaacsim_dir / "isaac-sim.sh"
         if not launch_script.exists():
             raise click.ClickException(f"Isaac Sim script not found at {launch_script}")
@@ -173,7 +173,7 @@ class Runner:
         if platform.machine().lower() not in ("x86_64", "amd64"):
             raise click.ClickException("Unsupported platform. Only x86_64 is supported by Isaac Sim.")
 
-        isaacsim_dir = PowConfig.resolve_global_path() / "isaacsim" / version
+        isaacsim_dir = PowConfig.version_dir(version)
         launch_script = isaacsim_dir / "isaac-sim.sh"
 
         if not launch_script.exists():
@@ -220,7 +220,7 @@ class Runner:
         if platform.machine().lower() not in ("x86_64", "amd64"):
             raise click.ClickException("Unsupported platform. Only x86_64 is supported by Isaac Sim.")
 
-        isaacsim_dir = PowConfig.resolve_global_path() / "isaacsim" / version
+        isaacsim_dir = PowConfig.version_dir(version)
         check_script = isaacsim_dir / "isaac-sim.compatibility_check.sh"
 
         if not check_script.exists():
@@ -302,7 +302,7 @@ class Runner:
             raise click.ClickException("Not initialized. Run `pow init` first.")
 
         isaacsim_version = config.get("version", PowConfig.ISAACSIM_VERSION)
-        python_script = config.global_path / "isaacsim" / isaacsim_version / "python.sh"
+        python_script = PowConfig.version_dir(isaacsim_version, config.global_path) / "python.sh"
 
         if not python_script.exists():
             raise click.ClickException(

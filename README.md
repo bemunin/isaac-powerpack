@@ -125,7 +125,7 @@ In the example below, the `"perf"` profile extends `"default"`, enables CPU perf
 
 ```toml
 [sim]
-version = "5.1.0"
+version = "6.0.1"
 ext_folders = ["./exts"]
 cpu_performance_mode = false
 headless = false
@@ -171,7 +171,7 @@ sim-project/
 ├── .modules/             # 3rd party module that use in your project e.g. pegasus sim
 ├── exts/                 # Your custom Isaac Sim extensions
 ├── usda/                 # USD scene description files
-├── _isaacsim/            # Symlink → ~/.pow/isaacsim/5.1.0 for intellisense and autocomplete
+├── _isaacsim/            # Symlink → ~/.pow/isaacsim/<version> for intellisense and autocomplete
 ├── .gitignore            # Pre-configured gitignore for Isaac Sim projects
 ├── pow.toml              # Project configuration (sim settings, profiles)
 └── pyproject.toml        # Python project manifest
@@ -182,7 +182,8 @@ sim-project/
 ```
 ~/.pow/
 ├── isaacsim/             # Downloaded Isaac Sim installations
-│   └── 5.1.0/            # Isaac Sim 5.1.0 app files
+│   ├── 5.1.0/            # Isaac Sim 5.1.0 app files
+│   └── 6.0.1/            # Isaac Sim 6.0.1 app files
 ├── modules/              # Shared modules
 ├── assets/               # mounting folder for local assets
 └── system.toml           # Global system configuration
@@ -195,10 +196,11 @@ sim-project/
 | :-------------------- | :--------------------------- |
 | OS                    | Ubuntu 22.04 / 24.04         |
 | ROS2 Docker           | Jazzy                        |
-| Isaac Sim             | `5.1.0`                      |
+| Isaac Sim             | `6.0.1` (default), `5.1.0`   |
 
 > [!NOTE]
 > Isaac Sim runs on Ubuntu 22.04 and 24.04; the ROS 2 workspace and docker integration support Jazzy only.  
+> `pow init` asks which Isaac Sim version to install, or takes it from `--sim-version` / the `[sim] version` key of an existing `pow.toml`.  
 
 <br>    
 

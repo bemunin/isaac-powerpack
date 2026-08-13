@@ -21,10 +21,37 @@ class PowConfig:
 
     # ── Isaac Sim constants ───────────────────────────────────────────────────
 
-    ISAACSIM_VERSION = "5.1.0"
-    ISAACSIM_FILENAME = f"isaac-sim-standalone-{ISAACSIM_VERSION}-linux-x86_64.zip"
-    ISAACSIM_URL = f"https://download.isaacsim.omniverse.nvidia.com/{ISAACSIM_FILENAME}"
+    #: Installable Isaac Sim releases, keyed by version.  **Ordered latest
+    #: first** - the default version, the version picker, and the auto-detected
+    #: ``pow sim -v`` all read "newest" as the first entry.
+    #: ``url`` is deliberately spelled out per release: 6.0.1 is served from a
+    #: different host than 5.1.0, so the download location cannot be derived
+    #: from the version string.
+    ISAACSIM_RELEASES: dict[str, dict[str, str]] = {
+        "6.0.1": {
+            "filename": "isaac-sim-standalone-6.0.1-linux-x86_64.zip",
+            "url": (
+                "https://downloads.isaacsim.nvidia.com/"
+                "isaac-sim-standalone-6.0.1-linux-x86_64.zip"
+            ),
+            "ros_ws_ref": "IsaacSim-6.0.1",
+        },
+        "5.1.0": {
+            "filename": "isaac-sim-standalone-5.1.0-linux-x86_64.zip",
+            "url": (
+                "https://download.isaacsim.omniverse.nvidia.com/"
+                "isaac-sim-standalone-5.1.0-linux-x86_64.zip"
+            ),
+            "ros_ws_ref": "IsaacSim-5.1.0",
+        },
+    }
+    SUPPORTED_ISAACSIM_VERSIONS = tuple(ISAACSIM_RELEASES)
+    ISAACSIM_VERSION = SUPPORTED_ISAACSIM_VERSIONS[0]
     SUPPORTED_UBUNTU_VERSIONS = ["22.04", "24.04"]
+
+    #: A version is used as a single path component under ``<global>/isaacsim/``.
+    #: Anything outside this shape could escape that directory.
+    _VERSION_COMPONENT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
     # ── ROS constants ────────────────────────────────────────────────────────
 
@@ -87,6 +114,81 @@ class PowConfig:
         work in directories that are not pow projects.
         """
         return Path.home() / cls._read_global_dir_name()
+
+    # ── Isaac Sim version helpers ────────────────────────────────────────────
+
+    @classmethod
+    def release(cls, version: str) -> dict[str, str]:
+        """Return download metadata for *version*, or raise.
+
+        This is the allowlist gate for installs: the download URL is only ever
+        read out of :attr:`ISAACSIM_RELEASES`, never built from a version
+        string supplied on the command line or read from pow.toml.
+        """
+        try:
+            return cls.ISAACSIM_RELEASES[str(version).strip()]
+        except KeyError:
+            raise click.ClickException(
+                f"Unsupported Isaac Sim version '{version}'. "
+                f"Supported versions: {', '.join(cls.SUPPORTED_ISAACSIM_VERSIONS)}."
+            ) from None
+
+    @classmethod
+    def version_dir(cls, version: str, global_path: Optional[Path] = None) -> Path:
+        """Resolve ``<global_path>/isaacsim/<version>`` safely.
+
+        Unlike :meth:`release` this accepts any well-formed version, so a
+        manually placed install still works with ``pow sim -v``.  It only
+        rejects values that would not be a single directory name (``..``,
+        embedded separators, absolute paths).
+        """
+        name = str(version).strip()
+        if not cls._VERSION_COMPONENT_RE.match(name):
+            raise click.ClickException(
+                f"Invalid Isaac Sim version '{version}'. "
+                "A version may only contain letters, digits, '.', '_' and '-'."
+            )
+        base = cls.resolve_global_path() if global_path is None else global_path
+        return base / "isaacsim" / name
+
+    @classmethod
+    def installed_versions(cls, global_path: Optional[Path] = None) -> list[str]:
+        """List Isaac Sim versions installed under ``<global_path>/isaacsim``.
+
+        A directory counts as installed only when it holds ``isaac-sim.sh``, so
+        a leftover partial extraction is not mistaken for a usable install.
+        Known releases sort first (latest to oldest), unknown ones after.
+        """
+        base = cls.resolve_global_path() if global_path is None else global_path
+        isaacsim_dir = base / "isaacsim"
+        try:
+            found = [
+                d.name for d in isaacsim_dir.iterdir()
+                if d.is_dir() and (d / "isaac-sim.sh").exists()
+            ]
+        except OSError:
+            return []
+
+        known = [v for v in cls.SUPPORTED_ISAACSIM_VERSIONS if v in found]
+        # Unknown versions also sort descending, so the whole list stays
+        # latest-first and callers can just take the head.
+        unknown = sorted(set(found) - set(known), reverse=True)
+        return known + unknown
+
+    @classmethod
+    def resolve_installed_version(cls, global_path: Optional[Path] = None) -> str:
+        """Default Isaac Sim version for commands that take ``-v``.
+
+        Prefers what is actually installed - the sole install when there is
+        one, otherwise the newest known release present - so ``pow sim`` works
+        without ``-v`` for users who installed a non-default version.  Falls
+        back to :attr:`ISAACSIM_VERSION` when nothing is installed.
+        """
+        installed = cls.installed_versions(global_path)
+        if not installed:
+            return cls.ISAACSIM_VERSION
+        known = [v for v in installed if v in cls.ISAACSIM_RELEASES]
+        return known[0] if known else installed[0]
 
     def _find_project_root(self, start_path: Optional[Path] = None) -> Optional[Path]:
         """Find the project root by locating pow.toml."""
@@ -211,7 +313,7 @@ class PowConfig:
         """ROS distro of the Isaac Sim internal ROS2 bridge (default profile).
 
         Reads ``ros_bridge`` from pow.toml ``[sim]`` and selects which
-        prebuilt bridge libs under ``exts/isaacsim.ros2.bridge/<distro>/lib``
+        prebuilt bridge libs under ``exts/isaacsim.ros2.core|bridge/<distro>/lib``
         Isaac Sim loads. Defaults to ``"jazzy"`` when the key is missing or
         pow.toml is not loaded. Use :meth:`get_ros_bridge` to resolve
         the value for a specific profile.

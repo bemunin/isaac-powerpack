@@ -11,7 +11,7 @@ This interactive command walks through a 10-step setup:
 1. Validates the project directory (requires `pyproject.toml`)
 2. Checks for existing `pow.toml` configuration
 3. Creates the `.pow` global folder if it's not exists
-4. Downloads and installs your specified Isaac Sim version in `.pow/isaacsim/<version>` folder
+4. Selects the Isaac Sim version, then downloads and installs it in `.pow/isaacsim/<version>`
 5. Applies post-install optimizations
 6. Sets up ROS integration (optional — builds Docker images). The workspace path prompt supports shell-style <kbd>Tab</kbd> completion: unique directories complete inline, ambiguous prefixes list candidates, and `~` is preserved
 7. Creates project structure (`exts/`, `.modules/`, `usda/`)
@@ -20,8 +20,45 @@ This interactive command walks through a 10-step setup:
 10. Generates `pow.toml` configuration
 
 ```bash
+# Pick the version interactively
 pow init
+
+# Or select it up front, skipping the picker
+pow init --sim-version 5.1.0
 ```
+
+| Option          | Description                                                     |
+| :-------------- | :-------------------------------------------------------------- |
+| `--sim-version` | Isaac Sim version to install: `6.0.1` or `5.1.0`. Skips the picker |
+
+The version is resolved in this order:
+
+1. `--sim-version`
+2. `[sim] version` from an existing `pow.toml` you chose to keep at step 2
+3. The step-4 picker, with the cursor on `6.0.1`
+
+Step 4 lists the installable versions latest first, marking which one is the
+latest release and which are already present in `~/.pow/isaacsim/`. Move with
+<kbd>↑</kbd>/<kbd>↓</kbd> and confirm with <kbd>Enter</kbd>:
+
+```
+[4/10] 📦 Isaac Sim App: Select a version to install
+
+   ❯ 6.0.1 (latest)
+     5.1.0 (installed)
+
+   ↑/↓ to move, Enter to confirm
+```
+
+> [!NOTE]
+> The picker needs a terminal. When stdin is piped, or in CI, `pow init` falls
+> back to a typed prompt (`Select Isaac Sim version [6.0.1/5.1.0] (6.0.1):`), so
+> the command stays scriptable. Use `--sim-version` to skip the question entirely.
+
+The chosen version drives the download, the matching `IsaacSim-<version>` ROS
+workspace tag cloned at step 6, the `_isaacsim` symlink at step 8, and the
+`version` key written to `pow.toml` at step 10. Re-running `pow init` with a
+different version re-points `_isaacsim` at the new installation.
 
 ---
 
@@ -59,10 +96,12 @@ Run Isaac Sim from **any** directory. Unlike `pow run`, this command needs no pr
 
 Use it to open Isaac Sim outside a project — inspecting a stray USD file, or sanity-checking the installation.
 
+Without `-v` the version is auto-detected from `.pow/isaacsim/`: the sole installation when there is one, otherwise the newest known release installed.
+
 `pow sim` is a command group whose default subcommand is `launch`: bare `pow sim [args...]` and `pow sim launch [args...]` are equivalent.
 
 ```bash
-# Launch the default version (5.1.0) with the jazzy ROS 2 bridge
+# Launch the installed version with the jazzy ROS 2 bridge
 pow sim
 
 # Launch without the ROS 2 bridge environment
@@ -83,7 +122,7 @@ pow sim launch -- --no-window
 
 | Option              | Description                                                  |
 | :------------------ | :----------------------------------------------------------- |
-| `-v`, `--version`   | Isaac Sim version to run (default: `5.1.0`)                  |
+| `-v`, `--version`   | Isaac Sim version to run (default: the installed version)    |
 | `--ros`             | ROS 2 bridge distro: `jazzy` (default) or `humble`           |
 | `--no-ros`          | Launch without the ROS 2 bridge environment; wins over `--ros` |
 
@@ -97,7 +136,7 @@ pow sim launch -- --no-window
 Run the Isaac Sim compatibility check to verify your system meets the requirements. It runs `.pow/isaacsim/<version>/isaac-sim.compatibility_check.sh` from the installation managed by `pow init`, so it needs no project.
 
 ```bash
-# Check the default version (5.1.0)
+# Check the installed version
 pow sim check
 
 # Check a different installed version
@@ -109,7 +148,7 @@ pow sim check -- --no-ros-env
 
 | Option              | Description                                        |
 | :------------------ | :------------------------------------------------- |
-| `-v`, `--version`   | Isaac Sim version to check (default: `5.1.0`)      |
+| `-v`, `--version`   | Isaac Sim version to check (default: the installed version) |
 
 > [!NOTE]
 > `--ros` / `--no-ros` do not apply here: the check script sources its own ROS environment. Forward `-- --no-ros-env` to skip that step. Raw arguments after `--` go straight to the script.

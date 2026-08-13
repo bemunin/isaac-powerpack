@@ -403,3 +403,88 @@ def test_ros_bridge_invalid_raises(tmp_path, monkeypatch, reset_config_singleton
 
     with pytest.raises(click.ClickException, match="Invalid ros_bridge"):
         _ = config.ros_bridge
+
+
+# ── Isaac Sim version registry ──────────────────────────────────────────────────
+
+def _install(base, version):
+    d = base / "isaacsim" / version
+    d.mkdir(parents=True)
+    (d / "isaac-sim.sh").touch()
+    return d
+
+
+def test_supported_versions_are_ordered_latest_first():
+    """The default, the picker and resolve_installed_version all take the head."""
+    assert PowConfig.SUPPORTED_ISAACSIM_VERSIONS[0] == PowConfig.ISAACSIM_VERSION
+    assert PowConfig.SUPPORTED_ISAACSIM_VERSIONS == ("6.0.1", "5.1.0")
+
+
+def test_installed_versions_lists_latest_first(tmp_path):
+    _install(tmp_path, "5.1.0")
+    _install(tmp_path, "6.0.1")
+
+    assert PowConfig.installed_versions(tmp_path) == ["6.0.1", "5.1.0"]
+
+
+def test_release_returns_metadata_for_supported_versions():
+    for version in PowConfig.SUPPORTED_ISAACSIM_VERSIONS:
+        release = PowConfig.release(version)
+        assert release["url"].startswith("https://")
+        assert version in release["filename"]
+        assert release["ros_ws_ref"] == f"IsaacSim-{version}"
+
+
+def test_release_hosts_differ_per_version():
+    """6.0.1 is served from a different host - the URL cannot be derived."""
+    assert PowConfig.release("6.0.1")["url"].startswith(
+        "https://downloads.isaacsim.nvidia.com/"
+    )
+    assert PowConfig.release("5.1.0")["url"].startswith(
+        "https://download.isaacsim.omniverse.nvidia.com/"
+    )
+
+
+@pytest.mark.parametrize("version", ["9.9.9", "", "5.1", "../5.1.0"])
+def test_release_rejects_unknown_versions(version):
+    with pytest.raises(click.ClickException, match="Unsupported Isaac Sim version"):
+        PowConfig.release(version)
+
+
+def test_version_dir_builds_path_under_global(tmp_path):
+    assert PowConfig.version_dir("5.1.0", tmp_path) == tmp_path / "isaacsim" / "5.1.0"
+
+
+def test_version_dir_allows_unregistered_but_well_formed_version(tmp_path):
+    """A manually placed install must still be reachable via `pow sim -v`."""
+    assert PowConfig.version_dir("5.0.0", tmp_path) == tmp_path / "isaacsim" / "5.0.0"
+
+
+@pytest.mark.parametrize("version", ["..", "../../etc", "a/b", "/abs", "", ".hidden"])
+def test_version_dir_rejects_path_traversal(version, tmp_path):
+    with pytest.raises(click.ClickException, match="Invalid Isaac Sim version"):
+        PowConfig.version_dir(version, tmp_path)
+
+
+def test_installed_versions_ignores_incomplete_extractions(tmp_path):
+    _install(tmp_path, "5.1.0")
+    (tmp_path / "isaacsim" / "6.0.1").mkdir()  # no isaac-sim.sh
+
+    assert PowConfig.installed_versions(tmp_path) == ["5.1.0"]
+
+
+def test_resolve_installed_version_returns_sole_install(tmp_path):
+    _install(tmp_path, "5.1.0")
+
+    assert PowConfig.resolve_installed_version(tmp_path) == "5.1.0"
+
+
+def test_resolve_installed_version_prefers_newest_known(tmp_path):
+    _install(tmp_path, "6.0.1")
+    _install(tmp_path, "5.1.0")
+
+    assert PowConfig.resolve_installed_version(tmp_path) == "6.0.1"
+
+
+def test_resolve_installed_version_falls_back_to_default(tmp_path):
+    assert PowConfig.resolve_installed_version(tmp_path) == PowConfig.ISAACSIM_VERSION

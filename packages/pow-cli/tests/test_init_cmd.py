@@ -2,6 +2,7 @@ import pytest
 from click.testing import CliRunner
 
 from pow_cli.cli.init import init_cmd
+from pow_cli.core.models.pow_config import PowConfig
 
 @pytest.mark.cli
 class TestInitCmd:
@@ -16,6 +17,12 @@ class TestInitCmd:
             "pow_cli.core.initializer.Initializer.download_isaacsim",
             return_value={"status": "Already installed", "path": "/tmp/isaacsim"}
         )
+        # Answer the version picker with the default so the "n\n" inputs below
+        # keep lining up with the Confirm prompts they were written for.
+        self.mock_version_prompt = mocker.patch(
+            "pow_cli.cli.init.ask_choice",
+            return_value=PowConfig.ISAACSIM_VERSION,
+        )
         self.mock_fix_cache = mocker.patch(
             "pow_cli.core.initializer.Initializer.fix_asset_browser_cache",
             return_value=True
@@ -26,7 +33,8 @@ class TestInitCmd:
                 "status": "success",
                 "ros_distro": "jazzy",
                 "ubuntu_version": "24.04",
-                "path": "/tmp/.pow/sim-ros"
+                "path": "/tmp/.pow/sim-ros",
+                "ws_ref": f"IsaacSim-{PowConfig.ISAACSIM_VERSION}",
             }
         )
         self.mock_setup_project = mocker.patch(
@@ -115,3 +123,121 @@ class TestInitCmd:
         # Answer 'n' to override config, 'n' to ROS integration
         result = self.runner.invoke(init_cmd, input="n\nn\n", env={"NO_COLOR": "1", "TERM": "dumb"})
         assert "Skipping ROS integration." in result.output
+
+
+@pytest.mark.cli
+class TestInitCmdSimVersion:
+    """Which Isaac Sim version `pow init` installs."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self, mocker):
+        self.runner = CliRunner()
+        self.mock_download = mocker.patch(
+            "pow_cli.core.initializer.Initializer.download_isaacsim",
+            return_value={"status": "Already installed", "path": "/tmp/isaacsim"},
+        )
+        self.mock_prompt = mocker.patch(
+            "pow_cli.cli.init.ask_choice", return_value=PowConfig.ISAACSIM_VERSION
+        )
+        # False answers both Confirms: keep any existing pow.toml, skip ROS.
+        mocker.patch("pow_cli.cli.init.Confirm.ask", return_value=False)
+        mocker.patch(
+            "pow_cli.core.initializer.Initializer.create_global_folder",
+            return_value={"global_existed": True, "results": []},
+        )
+        mocker.patch("pow_cli.core.initializer.Initializer.create_system_toml",
+                     return_value={"status": "Existed", "path": "system.toml"})
+        mocker.patch("pow_cli.core.initializer.Initializer.fix_asset_browser_cache",
+                     return_value=False)
+        mocker.patch("pow_cli.core.initializer.Initializer.setup_project_structure",
+                     return_value={"results": []})
+        mocker.patch("pow_cli.core.initializer.Initializer.setup_vscode_configs",
+                     return_value={"status": "Success", "results": []})
+        mocker.patch("pow_cli.core.initializer.Initializer.setup_omniverse_user_home_alias",
+                     return_value={"status": "unchanged", "path": "omniverse.toml"})
+        self.mock_link = mocker.patch(
+            "pow_cli.core.initializer.Initializer.link_managed_isaacsim",
+            return_value={"status": "Existed", "path": "_isaacsim"},
+        )
+        self.mock_create_pow_toml = mocker.patch(
+            "pow_cli.core.initializer.Initializer.create_pow_toml",
+            return_value={"status": "Created", "path": "pow.toml"},
+        )
+        mocker.patch("time.sleep")
+
+    def _no_pow_toml(self, mocker):
+        """Only pyproject.toml exists, so step 2 asks nothing."""
+        mocker.patch(
+            "pathlib.Path.exists",
+            side_effect=lambda path_obj, *a, **kw: str(path_obj) == "pyproject.toml",
+            autospec=True,
+        )
+
+    def test_flag_selects_version_without_prompting(self, mocker):
+        self._no_pow_toml(mocker)
+
+        result = self.runner.invoke(
+            init_cmd, ["--sim-version", "5.1.0"], env={"NO_COLOR": "1", "TERM": "dumb"}
+        )
+
+        assert result.exit_code == 0
+        self.mock_prompt.assert_not_called()
+        assert self.mock_download.call_args.kwargs["version"] == "5.1.0"
+        assert self.mock_link.call_args.kwargs["version"] == "5.1.0"
+        assert self.mock_create_pow_toml.call_args.kwargs["sim_version"] == "5.1.0"
+
+    def test_flag_rejects_unsupported_version(self, mocker):
+        self._no_pow_toml(mocker)
+
+        result = self.runner.invoke(
+            init_cmd, ["--sim-version", "9.9.9"], env={"NO_COLOR": "1", "TERM": "dumb"}
+        )
+
+        assert result.exit_code != 0
+        self.mock_download.assert_not_called()
+
+    def test_existing_pow_toml_version_wins_over_default(self, mocker):
+        """Keeping an existing pow.toml installs the version it declares."""
+        mocker.patch(
+            "pathlib.Path.exists",
+            side_effect=lambda p, *a, **kw: str(p) in ("pyproject.toml", "pow.toml"),
+            autospec=True,
+        )
+        mocker.patch("pow_cli.core.initializer.Initializer.read_config")
+        mocker.patch(
+            "pow_cli.core.models.pow_config.PowConfig.get",
+            side_effect=lambda key, default=None, profile="default": {
+                "version": "5.1.0", "enable_ros": False,
+            }.get(key, default),
+        )
+
+        result = self.runner.invoke(init_cmd, env={"NO_COLOR": "1", "TERM": "dumb"})
+
+        assert result.exit_code == 0
+        self.mock_prompt.assert_not_called()
+        assert self.mock_download.call_args.kwargs["version"] == "5.1.0"
+
+    def test_picker_is_used_when_nothing_else_specifies_a_version(self, mocker):
+        self._no_pow_toml(mocker)
+        mocker.patch.object(PowConfig, "installed_versions", return_value=["5.1.0"])
+        self.mock_prompt.return_value = "5.1.0"
+
+        result = self.runner.invoke(init_cmd, env={"NO_COLOR": "1", "TERM": "dumb"})
+
+        assert result.exit_code == 0
+        choices = self.mock_prompt.call_args[0][1]
+        # Latest first, annotated from data pow already has.
+        assert choices == [("6.0.1", "latest"), ("5.1.0", "installed")]
+        assert self.mock_prompt.call_args.kwargs["default"] == PowConfig.ISAACSIM_VERSION
+        assert self.mock_download.call_args.kwargs["version"] == "5.1.0"
+
+    def test_picker_marks_a_version_both_latest_and_installed(self, mocker):
+        self._no_pow_toml(mocker)
+        mocker.patch.object(PowConfig, "installed_versions", return_value=["6.0.1"])
+
+        self.runner.invoke(init_cmd, env={"NO_COLOR": "1", "TERM": "dumb"})
+
+        assert self.mock_prompt.call_args[0][1] == [
+            ("6.0.1", "latest, installed"),
+            ("5.1.0", ""),
+        ]

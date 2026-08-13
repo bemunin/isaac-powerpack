@@ -7,6 +7,15 @@ from ..core.models.pow_config import PowConfig
 from ..core.runner import Runner
 
 
+def _default_sim_version() -> str:
+    """Version used when ``-v`` is omitted: whatever is actually installed.
+
+    click evaluates a callable default at parse time, so the scan of
+    ``<global>/isaacsim`` happens per invocation rather than at import.
+    """
+    return PowConfig.resolve_installed_version()
+
+
 def _guarded(action, **kwargs):
     """Run a Runner action, rendering unexpected errors as a Sim Error panel."""
     try:
@@ -46,8 +55,9 @@ def sim_group(ctx: click.Context):
 
     \b
     Unlike `pow run` this needs no project: no pyproject.toml is required and
-    pow.toml is never read. Every unrecognized argument is forwarded verbatim
-    to .pow/isaacsim/<version>/isaac-sim.sh.
+    pow.toml is never read. The version defaults to whatever is installed under
+    .pow/isaacsim/ (the newest when several are). Every unrecognized argument is
+    forwarded verbatim to .pow/isaacsim/<version>/isaac-sim.sh.
 
     \b
     Subcommands:
@@ -64,7 +74,7 @@ def sim_group(ctx: click.Context):
     if ctx.invoked_subcommand is None:
         _guarded(
             Runner.run_sim,
-            version=PowConfig.ISAACSIM_VERSION,
+            version=_default_sim_version(),
             ros_bridge=PowConfig.ROS_BRIDGE,
             extra_args=[],
         )
@@ -78,8 +88,8 @@ def sim_group(ctx: click.Context):
     "-v",
     "--version",
     "sim_version",
-    default=PowConfig.ISAACSIM_VERSION,
-    show_default=True,
+    default=_default_sim_version,
+    show_default="the installed version",
     help="Isaac Sim version to run.",
 )
 @click.option(
@@ -115,8 +125,8 @@ def launch_cmd(ctx: click.Context, sim_version: str, ros_bridge: str, no_ros: bo
     "-v",
     "--version",
     "sim_version",
-    default=PowConfig.ISAACSIM_VERSION,
-    show_default=True,
+    default=_default_sim_version,
+    show_default="the installed version",
     help="Isaac Sim version to check.",
 )
 @click.pass_context

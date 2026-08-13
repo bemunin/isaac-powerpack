@@ -6,7 +6,10 @@ from unittest.mock import MagicMock
 import subprocess
 
 from pow_cli.core import runner as runner_module
+from pow_cli.core.models.pow_config import PowConfig
 from pow_cli.core.runner import Runner
+
+DEFAULT_VERSION = PowConfig.ISAACSIM_VERSION
 
 @pytest.fixture
 def mock_config(mocker):
@@ -31,7 +34,9 @@ def mock_config(mocker):
         return data.get(key, default)
         
     cfg.get.side_effect = mock_get
-    mocker.patch("pow_cli.core.runner.PowConfig", return_value=cfg)
+    mock_powconfig = mocker.patch("pow_cli.core.runner.PowConfig", return_value=cfg)
+    mock_powconfig.ISAACSIM_VERSION = PowConfig.ISAACSIM_VERSION
+    mock_powconfig.version_dir.side_effect = PowConfig.version_dir
     return cfg
 
 def test_build_launch_command_default(mock_config, mocker):
@@ -237,7 +242,7 @@ def test_run_sim_builds_command_from_defaults(sim_env):
     Runner.run_sim(extra_args=["--no-window"])
 
     args, kwargs = sim_env["run"].call_args
-    assert args[0] == ["/home/user/.pow/isaacsim/5.1.0/isaac-sim.sh", "--no-window"]
+    assert args[0] == [f"/home/user/.pow/isaacsim/{DEFAULT_VERSION}/isaac-sim.sh", "--no-window"]
     assert kwargs.get("check") is True
 
 
@@ -245,7 +250,7 @@ def test_run_sim_uses_jazzy_bridge_by_default(sim_env):
     Runner.run_sim()
 
     sim_env["bridge_env"].assert_called_once_with(
-        Path("/home/user/.pow/isaacsim/5.1.0"), "jazzy"
+        Path(f"/home/user/.pow/isaacsim/{DEFAULT_VERSION}"), "jazzy"
     )
     assert sim_env["run"].call_args.kwargs["env"] == {"ROS_DISTRO": "jazzy"}
 
@@ -254,7 +259,7 @@ def test_run_sim_honors_requested_bridge(sim_env):
     Runner.run_sim(ros_bridge="humble")
 
     sim_env["bridge_env"].assert_called_once_with(
-        Path("/home/user/.pow/isaacsim/5.1.0"), "humble"
+        Path(f"/home/user/.pow/isaacsim/{DEFAULT_VERSION}"), "humble"
     )
 
 
@@ -316,7 +321,7 @@ def test_run_sim_check_builds_command_from_defaults(check_env):
     Runner.run_sim_check()
 
     args, kwargs = check_env["popen"].call_args
-    assert args[0] == ["/home/user/.pow/isaacsim/5.1.0/isaac-sim.compatibility_check.sh"]
+    assert args[0] == [f"/home/user/.pow/isaacsim/{DEFAULT_VERSION}/isaac-sim.compatibility_check.sh"]
     assert kwargs["stderr"] == subprocess.STDOUT
 
 
@@ -343,7 +348,7 @@ def test_run_sim_check_puts_bundled_modules_on_pythonpath(check_env):
 
     pythonpath = check_env["popen"].call_args.kwargs["env"]["PYTHONPATH"]
     assert (
-        "/home/user/.pow/isaacsim/5.1.0/exts/omni.isaac.core_archive/pip_prebundle"
+        f"/home/user/.pow/isaacsim/{DEFAULT_VERSION}/exts/omni.isaac.core_archive/pip_prebundle"
         in pythonpath.split(":")
     )
 
@@ -416,3 +421,18 @@ def test_run_python_calls_subprocess(mock_config, mocker):
     assert "my_script.py" in args[0]
     assert "--arg1" in args[0]
     assert kwargs.get("check") is True
+
+
+def test_run_sim_rejects_version_with_path_traversal(sim_env):
+    """A crafted -v must not escape <global>/isaacsim/."""
+    with pytest.raises(click.ClickException, match="Invalid Isaac Sim version"):
+        Runner.run_sim(version="../../etc")
+
+    sim_env["run"].assert_not_called()
+
+
+def test_run_sim_check_rejects_version_with_path_traversal(check_env):
+    with pytest.raises(click.ClickException, match="Invalid Isaac Sim version"):
+        Runner.run_sim_check(version="../../etc")
+
+    check_env["popen"].assert_not_called()

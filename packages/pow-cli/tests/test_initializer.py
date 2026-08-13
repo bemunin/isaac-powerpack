@@ -81,3 +81,80 @@ class TestInitializer:
 
         assert isaacsim_res["status"] == "Existed"
         assert modules_res["status"] == "Skipped"
+
+
+class TestLinkManagedIsaacsim:
+    """`_isaacsim` must follow the version selected during `pow init`."""
+
+    @pytest.fixture
+    def project(self, tmp_path, mocker, monkeypatch):
+        cfg = MagicMock()
+        cfg.global_dir_name = ".pow"
+        cfg.global_path = tmp_path / ".pow"
+        mocker.patch.object(
+            Initializer, "config", new_callable=lambda: property(lambda self: cfg)
+        )
+        for version in ("5.1.0", "6.0.1"):
+            (cfg.global_path / "isaacsim" / version).mkdir(parents=True)
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+        monkeypatch.chdir(project_dir)
+        return cfg, project_dir
+
+    def test_creates_symlink_for_requested_version(self, project):
+        cfg, project_dir = project
+
+        result = Initializer().link_managed_isaacsim(version="6.0.1")
+
+        assert result["status"] == "Created"
+        assert (project_dir / "_isaacsim").resolve() == cfg.global_path / "isaacsim" / "6.0.1"
+
+    def test_repoints_symlink_when_version_changes(self, project):
+        cfg, project_dir = project
+        initializer = Initializer()
+        initializer.link_managed_isaacsim(version="5.1.0")
+
+        result = initializer.link_managed_isaacsim(version="6.0.1")
+
+        assert result["status"] == "Repointed"
+        assert result["previous"].endswith("/5.1.0")
+        assert (project_dir / "_isaacsim").resolve() == cfg.global_path / "isaacsim" / "6.0.1"
+
+    def test_leaves_symlink_alone_when_already_correct(self, project):
+        initializer = Initializer()
+        initializer.link_managed_isaacsim(version="6.0.1")
+
+        assert initializer.link_managed_isaacsim(version="6.0.1")["status"] == "Existed"
+
+    def test_never_deletes_a_real_directory(self, project):
+        _, project_dir = project
+        real_dir = project_dir / "_isaacsim"
+        real_dir.mkdir()
+        (real_dir / "keep.txt").write_text("mine")
+
+        result = Initializer().link_managed_isaacsim(version="6.0.1")
+
+        assert result["status"] == "Error"
+        assert "not a symlink" in result["message"]
+        assert (real_dir / "keep.txt").read_text() == "mine"
+
+    def test_reports_missing_install(self, project):
+        result = Initializer().link_managed_isaacsim(version="5.0.0")
+
+        assert result["status"] == "Error"
+        assert "not found" in result["message"]
+
+
+class TestPatchPowToml:
+    def test_writes_selected_version(self, tmp_path):
+        pow_toml = tmp_path / "pow.toml"
+        pow_toml.write_text('[sim]\nversion = "6.0.1"\nenable_ros = false\n')
+
+        Initializer()._patch_pow_toml(
+            pow_toml, enable_ros=True, isaacsim_ros_ws="~/ws", sim_version="5.1.0",
+        )
+
+        content = pow_toml.read_text()
+        assert 'version = "5.1.0"' in content
+        assert "enable_ros = true" in content
+        assert 'isaacsim_ros_ws = "~/ws"' in content

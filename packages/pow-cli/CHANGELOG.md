@@ -6,6 +6,17 @@ All notable changes to the `pow-cli` package will be documented in this file.
 
 ### Added
 
+- **Isaac Sim 6.0.1 support.** `pow init` step 4 now offers the installable
+  versions as an arrow-key picker — latest first, marking the latest release and
+  any already installed — or takes the version from the new `--sim-version`
+  flag, or from `[sim] version` in an existing `pow.toml` you chose to keep. The
+  picker falls back to a typed prompt when there is no terminal (piped stdin,
+  CI), so the command stays scriptable. Releases live in
+  `PowConfig.ISAACSIM_RELEASES`, which pins each version's download URL — 6.0.1
+  is served from `downloads.isaacsim.nvidia.com`, not the host used for 5.1.0 —
+  and the matching `IsaacSim-<version>` ROS workspace ref cloned during setup.
+- `pow sim` / `pow sim check` default `-v` to the Isaac Sim version actually
+  installed under `.pow/isaacsim/` instead of a fixed constant.
 - **`pow sim check`** — run the Isaac Sim compatibility check from the managed
   installation (`.pow/isaacsim/<version>/isaac-sim.compatibility_check.sh`), with
   `-v/--version` to pick the version. Needs no project and no extra pip
@@ -15,8 +26,35 @@ All notable changes to the `pow-cli` package will be documented in this file.
   forwards raw arguments exactly as before, and `pow sim launch` is the explicit
   form
 
+### Changed
+
+- The `_isaacsim` symlink is re-pointed when `pow init` installs a different
+  version, instead of being left on the previous installation. A real directory
+  at `_isaacsim` is never deleted; it is reported as an error.
+- `pow init` writes the selected `version` into the generated `pow.toml`.
+- Isaac Sim's bundled ROS 2 libraries are located by probing
+  `exts/isaacsim.ros2.core/<distro>/lib` and then
+  `exts/isaacsim.ros2.bridge/<distro>/lib`, so ROS works on 6.0.1, which renamed
+  the extension.
+
+### Security
+
+- An Isaac Sim version can no longer escape `.pow/isaacsim/`: versions used as a
+  path component are validated, and download URLs are only ever read from the
+  release registry, never built from a supplied version string.
+- Archive members are chmod-ed via the path `zipfile` actually wrote rather than
+  a recomputed one, so a crafted zip cannot change permissions outside the
+  install directory; setuid/setgid bits in the archive are dropped.
+
 ### Fixed
 
+- An interrupted Isaac Sim download no longer leaves a truncated zip that the
+  next `pow init` mistakes for a complete archive: downloads land on a `.part`
+  file and are renamed only once finished.
+- Execute permissions are restored before `post_install.sh` runs, so an archive
+  without Unix mode bits no longer fails the install.
+- `pow asset` resolves the `.kit` file from the project's configured Isaac Sim
+  version instead of a hardcoded `5.1.0` path.
 - **`pow sim check` could report nothing at all** — inside Isaac Sim's bundled
   Python the check extension failed with `ModuleNotFoundError: No module named
   'packaging'` (then `'setuptools'`) and never produced a verdict. The vendor

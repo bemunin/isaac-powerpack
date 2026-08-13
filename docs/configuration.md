@@ -8,7 +8,7 @@ The `[sim]` section defines the base (default) settings used by `pow run`:
 
 ```toml
 [sim]
-version = "5.1.0"
+version = "6.0.1"
 ext_folders = ["./exts"]
 cpu_performance_mode = false
 headless = false
@@ -25,12 +25,12 @@ raw_args = ["--/renderer/raytracingMotion/enabled=false"]
 
 | Key                    | Type       | Default                              | Description |
 |:-----------------------|:-----------|:-------------------------------------|:------------|
-| `version`              | `string`   | `"5.1.0"`                            | Isaac Sim version to use. |
+| `version`              | `string`   | `"6.0.1"`                            | Isaac Sim version to use. One of `6.0.1` or `5.1.0`. `pow init` installs this version when you keep an existing `pow.toml`. |
 | `ext_folders`          | `string[]` | `["./exts"]`                         | Directories to search for custom extensions. |
 | `cpu_performance_mode` | `bool`     | `false`                              | Enable CPU performance governor via `cpupower` (requires `sudo`). Skipped when the governor is already `performance`, so the password is normally asked once rather than on every launch — see the note below. |
 | `headless`             | `bool`     | `false`                              | Run Isaac Sim without the GUI window. |
 | `enable_ros`           | `bool`     | `false`                              | Source the ROS 2 workspace environment before launching. |
-| `ros_bridge`    | `string`   | `"jazzy"`                            | ROS distro of the Isaac Sim internal ROS2 bridge libs to load (`jazzy` or `humble`). Selects which `exts/isaacsim.ros2.bridge/<distro>/lib` is added to `LD_LIBRARY_PATH` when `enable_ros = true`. Overridable per profile. |
+| `ros_bridge`    | `string`   | `"jazzy"`                            | ROS distro of the Isaac Sim internal ROS2 bridge libs to load (`jazzy` or `humble`). Selects which `exts/isaacsim.ros2.core/<distro>/lib` (`isaacsim.ros2.bridge` before Isaac Sim 6.0) is added to `LD_LIBRARY_PATH` when `enable_ros = true`. Overridable per profile. |
 | `isaacsim_ros_ws`      | `string`   | `"~/IsaacSim-ros_workspaces"`        | Path to the cloned IsaacSim-ros_workspaces directory. |
 | `ros_dockerfile`       | `string`   | `""`                                 | Path (relative to project root) to a custom ROS Dockerfile built on top of the bundled `pow_simros_jazzy` base image. Empty = use the base image only. |
 | `ros_docker_image`     | `string`   | `"pow_simros"`                       | Docker image name for the ROS image launched by `pow ros` (the custom image tag when `ros_dockerfile` is set). The container name is derived from the image name (`/` and `:` replaced with `_`). |
@@ -181,7 +181,7 @@ In this example:
 
 ```toml
 [sim]
-version = "5.1.0"
+version = "6.0.1"
 ext_folders = ["./exts"]
 cpu_performance_mode = false
 headless = false
