@@ -1,4 +1,5 @@
 import pytest
+import tomlkit
 from pathlib import Path
 from unittest.mock import MagicMock
 from pow_cli.core.initializer import Initializer
@@ -158,3 +159,179 @@ class TestPatchPowToml:
         assert 'version = "5.1.0"' in content
         assert "enable_ros = true" in content
         assert 'isaacsim_ros_ws = "~/ws"' in content
+
+
+    def test_reports_only_keys_that_moved(self, tmp_path):
+        pow_toml = tmp_path / "pow.toml"
+        pow_toml.write_text(
+            '[sim]\nversion = "6.0.1"\nenable_ros = false\n'
+            'isaacsim_ros_ws = "~/ws"\n'
+        )
+
+        changed = Initializer()._patch_pow_toml(
+            pow_toml, enable_ros=True, isaacsim_ros_ws="~/ws", sim_version="6.0.1",
+        )
+
+        assert changed == {"enable_ros": (False, True)}
+
+    def test_absent_key_reports_no_previous_value(self, tmp_path):
+        pow_toml = tmp_path / "pow.toml"
+        pow_toml.write_text('[sim]\nexts = ["mine"]\n')
+
+        changed = Initializer()._patch_pow_toml(
+            pow_toml, enable_ros=False, isaacsim_ros_ws="~/ws", sim_version="6.0.1",
+        )
+
+        assert changed["version"] == (None, "6.0.1")
+        assert changed["enable_ros"] == (None, False)
+
+    def test_no_write_when_nothing_changed(self, tmp_path):
+        pow_toml = tmp_path / "pow.toml"
+        original = (
+            '# hand written\n[sim]\nversion   =   "6.0.1"\n'
+            'enable_ros = true\nisaacsim_ros_ws = "~/ws"\n'
+        )
+        pow_toml.write_text(original)
+
+        changed = Initializer()._patch_pow_toml(
+            pow_toml, enable_ros=True, isaacsim_ros_ws="~/ws", sim_version="6.0.1",
+        )
+
+        assert changed == {}
+        # Untouched down to the odd spacing: a re-run of init is a true no-op.
+        assert pow_toml.read_text() == original
+
+    def test_adds_sim_table_without_disturbing_the_rest(self, tmp_path):
+        pow_toml = tmp_path / "pow.toml"
+        pow_toml.write_text('[[profiles]]\nname = "mine"\ncpu_performance_mode = true\n')
+
+        Initializer()._patch_pow_toml(
+            pow_toml, enable_ros=True, isaacsim_ros_ws="~/ws", sim_version="5.1.0",
+        )
+
+        content = pow_toml.read_text()
+        assert '[[profiles]]' in content
+        assert 'name = "mine"' in content
+        assert 'version = "5.1.0"' in content
+
+    def test_invalid_toml_raises_and_leaves_file_alone(self, tmp_path):
+        pow_toml = tmp_path / "pow.toml"
+        broken = '[sim]\nversion = "6.0.1"\nbad = [\n'
+        pow_toml.write_text(broken)
+
+        with pytest.raises(tomlkit.exceptions.ParseError):
+            Initializer()._patch_pow_toml(
+                pow_toml, enable_ros=True, isaacsim_ros_ws="~/ws", sim_version="5.1.0",
+            )
+
+        assert pow_toml.read_text() == broken
+
+
+class TestCreatePowToml:
+    """`pow init` must update settings in pow.toml, never replace the file."""
+
+    @pytest.fixture(autouse=True)
+    def _no_git(self, mocker, tmp_path, monkeypatch):
+        mocker.patch.object(Initializer, "init_git", return_value={"status": "Existed"})
+        monkeypatch.chdir(tmp_path)
+        self.pow_toml = tmp_path / "pow.toml"
+
+    CUSTOM = """\
+# my own notes
+[sim]
+version = "5.1.0"
+enable_ros = false
+exts = ["my.custom.ext"]
+raw_args = ["--/renderer/x=1"]
+ros_docker_image = "mine"
+
+[[profiles]]
+name = "mine"
+extends = "default"
+cpu_performance_mode = true
+"""
+
+    def test_override_keeps_every_other_setting(self):
+        self.pow_toml.write_text(self.CUSTOM)
+
+        result = Initializer().create_pow_toml(
+            override=True, enable_ros=True, isaacsim_ros_ws="~/ws",
+            sim_version="6.0.1",
+        )
+
+        assert result["status"] == "Updated"
+        content = self.pow_toml.read_text()
+        # The three settings init collected are the only ones that moved.
+        assert 'version = "6.0.1"' in content
+        assert "enable_ros = true" in content
+        assert 'isaacsim_ros_ws = "~/ws"' in content
+        # Everything the user wrote is still there, comment included.
+        assert "# my own notes" in content
+        assert 'exts = ["my.custom.ext"]' in content
+        assert 'raw_args = ["--/renderer/x=1"]' in content
+        assert 'ros_docker_image = "mine"' in content
+        assert "[[profiles]]" in content
+        assert 'name = "mine"' in content
+        assert "cpu_performance_mode = true" in content
+
+    def test_override_reports_what_changed(self):
+        self.pow_toml.write_text(self.CUSTOM)
+
+        result = Initializer().create_pow_toml(
+            override=True, enable_ros=True, isaacsim_ros_ws="~/ws",
+            sim_version="6.0.1",
+        )
+
+        assert result["changed"]["version"] == ("5.1.0", "6.0.1")
+        assert result["changed"]["enable_ros"] == (False, True)
+
+    def test_second_identical_run_changes_nothing(self):
+        self.pow_toml.write_text(self.CUSTOM)
+        kwargs = dict(
+            override=True, enable_ros=True, isaacsim_ros_ws="~/ws",
+            sim_version="6.0.1",
+        )
+        Initializer().create_pow_toml(**kwargs)
+        after_first = self.pow_toml.read_text()
+
+        result = Initializer().create_pow_toml(**kwargs)
+
+        assert result["changed"] == {}
+        assert self.pow_toml.read_text() == after_first
+
+    def test_keep_leaves_the_file_byte_identical(self):
+        self.pow_toml.write_text(self.CUSTOM)
+
+        result = Initializer().create_pow_toml(
+            override=False, enable_ros=True, isaacsim_ros_ws="~/ws",
+            sim_version="6.0.1",
+        )
+
+        assert result["status"] == "Existed"
+        assert self.pow_toml.read_text() == self.CUSTOM
+
+    def test_creates_from_template_when_absent(self):
+        result = Initializer().create_pow_toml(
+            override=True, enable_ros=True, isaacsim_ros_ws="~/ws",
+            sim_version="5.1.0",
+        )
+
+        assert result["status"] == "Created"
+        content = self.pow_toml.read_text()
+        assert 'version = "5.1.0"' in content
+        assert "enable_ros = true" in content
+        # Template defaults the user never saw a prompt for come along.
+        assert 'ros_bridge = "jazzy"' in content
+
+    def test_unparseable_file_is_reported_not_rewritten(self):
+        broken = self.CUSTOM + "\nbad = [\n"
+        self.pow_toml.write_text(broken)
+
+        result = Initializer().create_pow_toml(
+            override=True, enable_ros=True, isaacsim_ros_ws="~/ws",
+            sim_version="6.0.1",
+        )
+
+        assert result["status"] == "Error"
+        assert result["message"]
+        assert self.pow_toml.read_text() == broken

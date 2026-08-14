@@ -391,28 +391,64 @@ class Initializer:
         isaacsim_ros_ws: str = "~/IsaacSim-ros_workspaces",
         sim_version: str | None = None,
     ) -> dict:
-        """Copy pow.template.toml to pow.toml and patch settings from user choices."""
+        """Write the settings init collected into pow.toml.
+
+        A missing pow.toml is created from the template.  An existing one is
+        either left alone (``override=False``) or **patched in place** - only the
+        keys init actually asked about are rewritten, so custom settings,
+        ``[[profiles]]`` and comments survive.  A pow.toml that cannot be parsed
+        is never written to; the caller reports the error and the file stays
+        exactly as the user left it.
+
+        Returns:
+            ``status`` is one of ``Created``, ``Updated``, ``Existed``,
+            ``Template not found`` or ``Error``.  ``Created``/``Updated`` also
+            carry ``changed`` - see :meth:`_patch_pow_toml`.
+        """
         # Initialize git if not already done
         self.init_git()
 
         pow_toml_path = Path("pow.toml")
 
-        if pow_toml_path.exists() and not override:
-            return {"status": "Existed", "path": str(pow_toml_path)}
+        if pow_toml_path.exists():
+            if not override:
+                return {"status": "Existed", "path": str(pow_toml_path)}
+            try:
+                changed = self._patch_pow_toml(
+                    pow_toml_path,
+                    enable_ros=enable_ros,
+                    isaacsim_ros_ws=isaacsim_ros_ws,
+                    sim_version=sim_version,
+                )
+            except tomlkit.exceptions.ParseError as e:
+                return {
+                    "status": "Error",
+                    "path": str(pow_toml_path),
+                    "message": str(e),
+                }
+            return {
+                "status": "Updated",
+                "path": str(pow_toml_path),
+                "changed": changed,
+            }
 
         template_path = self._data_path("pow.template.toml")
         if not template_path.exists():
             return {"status": "Template not found", "path": str(pow_toml_path)}
 
         shutil.copy(template_path, pow_toml_path)
-        self._patch_pow_toml(
+        changed = self._patch_pow_toml(
             pow_toml_path,
             enable_ros=enable_ros,
             isaacsim_ros_ws=isaacsim_ros_ws,
             sim_version=sim_version,
         )
 
-        return {"status": "Created", "path": str(pow_toml_path)}
+        return {
+            "status": "Created",
+            "path": str(pow_toml_path),
+            "changed": changed,
+        }
 
     # ── Private methods ─────────────────────────────────────────────────────────
 
@@ -547,11 +583,25 @@ class Initializer:
         enable_ros: bool,
         isaacsim_ros_ws: str = "~/IsaacSim-ros_workspaces",
         sim_version: str | None = None,
-    ):
-        """Patch values in pow.toml to reflect user choices made during init."""
-        content = pow_toml_path.read_text()
+    ) -> dict:
+        """Update the settings init collected, leaving the rest of the file alone.
 
-        doc = tomlkit.parse(content)
+        tomlkit round-trips comments, key order and formatting, so only the three
+        keys below are touched.  Keys the template has and this file lacks are
+        deliberately **not** back-filled: PowConfig defaults every missing key,
+        so an older pow.toml keeps working untouched.
+
+        Returns:
+            ``{key: (old, new)}`` for the keys whose value actually changed, with
+            ``old`` set to ``None`` when the key was absent.  Empty when the file
+            already says what init would write - nothing is written in that case,
+            so a re-run of init is a true no-op.
+
+        Raises:
+            tomlkit.exceptions.ParseError: the file is not valid TOML.  Nothing
+                is written, so the file survives intact.
+        """
+        doc = tomlkit.parse(pow_toml_path.read_text())
 
         patch = {
             "version": sim_version or PowConfig.ISAACSIM_VERSION,
@@ -559,15 +609,28 @@ class Initializer:
             "isaacsim_ros_ws": isaacsim_ros_ws,
         }
 
-        # We ensure the top-level [sim] section is present or patch it.
-        # Since the template already has [sim], we just update the keys within it.
-        if "sim" in doc and isinstance(doc["sim"], dict):
-            for key, value in patch.items():
-                doc["sim"][key] = value
-        else:
+        # A document with no usable [sim] table gets one; anything else it holds
+        # (such as [[profiles]]) is left where it is.
+        sim = doc["sim"] if "sim" in doc and isinstance(doc["sim"], dict) else None
+
+        changed = {}
+        for key, value in patch.items():
+            old = sim.get(key) if sim is not None else None
+            if old is not None and old == value:
+                continue
+            changed[key] = (old, value)
+
+        if not changed:
+            return changed
+
+        if sim is None:
             doc["sim"] = patch
+        else:
+            for key in changed:
+                sim[key] = patch[key]
 
         pow_toml_path.write_text(tomlkit.dumps(doc))
+        return changed
 
     def setup_omniverse_user_home_alias(self) -> dict:
         """Ensure ``user-home`` alias is set in the Omniverse config.

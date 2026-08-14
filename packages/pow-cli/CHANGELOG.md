@@ -38,6 +38,16 @@ All notable changes to the `pow-cli` package will be documented in this file.
 
 ### Changed
 
+- **`pow init` no longer replaces an existing `pow.toml`.** Choosing to update
+  the configuration used to overwrite the file with the bundled template, losing
+  custom `exts`, `raw_args`, `ros_bridge`, every `[[profiles]]` block and all
+  comments. It now patches only the three settings init asks about — `version`,
+  `enable_ros`, `isaacsim_ros_ws` — and leaves the rest of the document, key
+  order and comments included, exactly as written. Step 10 lists what changed
+  (`version: 5.1.0 → 6.0.1`), and says the file is already up to date when
+  nothing moved, in which case it is not rewritten at all. Keys the template has
+  and your file lacks are deliberately not back-filled. The step-2 prompt is
+  reworded from "override" to "Update settings in existing pow.toml?" to match.
 - The `_isaacsim` symlink is re-pointed when `pow init` installs a different
   version, instead of being left on the previous installation. A real directory
   at `_isaacsim` is never deleted; it is reported as an error.
@@ -58,6 +68,10 @@ All notable changes to the `pow-cli` package will be documented in this file.
 
 ### Fixed
 
+- A `pow.toml` that is not valid TOML is reported as
+  `pow.toml is not valid TOML: <parse error>` with a pointer to fix or delete it,
+  instead of a raw `tomllib` traceback. No command rewrites the file to make it
+  parse.
 - An interrupted Isaac Sim download no longer leaves a truncated zip that the
   next `pow init` mistakes for a complete archive: downloads land on a `.part`
   file and are renamed only once finished.

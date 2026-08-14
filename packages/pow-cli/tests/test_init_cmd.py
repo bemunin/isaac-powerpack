@@ -241,3 +241,118 @@ class TestInitCmdSimVersion:
             ("6.0.1", "latest, installed"),
             ("5.1.0", ""),
         ]
+
+
+@pytest.mark.cli
+class TestInitCmdFinalize:
+    """Step 10 reports what it wrote to pow.toml, and fails loudly when it can't."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self, mocker):
+        self.runner = CliRunner()
+        mocker.patch(
+            "pow_cli.core.initializer.Initializer.download_isaacsim",
+            return_value={"status": "Already installed", "path": "/tmp/isaacsim"},
+        )
+        mocker.patch("pow_cli.cli.init.ask_choice", return_value=PowConfig.ISAACSIM_VERSION)
+        # Say yes to updating pow.toml, no to ROS.
+        self.mock_confirm = mocker.patch(
+            "pow_cli.cli.init.Confirm.ask", side_effect=[True, False]
+        )
+        mocker.patch("pow_cli.core.initializer.Initializer.read_config")
+        mocker.patch("pow_cli.core.initializer.Initializer.create_global_folder",
+                     return_value={"global_existed": True, "results": []})
+        mocker.patch("pow_cli.core.initializer.Initializer.create_system_toml",
+                     return_value={"status": "Existed", "path": "system.toml"})
+        mocker.patch("pow_cli.core.initializer.Initializer.fix_asset_browser_cache",
+                     return_value=False)
+        mocker.patch("pow_cli.core.initializer.Initializer.setup_project_structure",
+                     return_value={"results": []})
+        mocker.patch("pow_cli.core.initializer.Initializer.setup_vscode_configs",
+                     return_value={"status": "Success", "results": []})
+        mocker.patch("pow_cli.core.initializer.Initializer.setup_omniverse_user_home_alias",
+                     return_value={"status": "unchanged", "path": "omniverse.toml"})
+        mocker.patch("pow_cli.core.initializer.Initializer.link_managed_isaacsim",
+                     return_value={"status": "Existed", "path": "_isaacsim"})
+        mocker.patch("time.sleep")
+        # An existing pow.toml, so step 2 asks whether to update it.
+        mocker.patch(
+            "pathlib.Path.exists",
+            side_effect=lambda path_obj, *a, **kw: str(path_obj) in
+            ("pyproject.toml", "pow.toml"),
+            autospec=True,
+        )
+        self.mock_create_pow_toml = mocker.patch(
+            "pow_cli.core.initializer.Initializer.create_pow_toml"
+        )
+
+    def _run(self):
+        return self.runner.invoke(init_cmd, env={"NO_COLOR": "1", "TERM": "dumb"})
+
+    def test_step2_promises_a_merge_not_a_replacement(self):
+        self.mock_create_pow_toml.return_value = {
+            "status": "Updated", "path": "pow.toml", "changed": {},
+        }
+
+        result = self._run()
+
+        # Confirm.ask is mocked, so check the question it was asked with.
+        assert "Update settings in existing pow.toml?" in self.mock_confirm.call_args_list[0][0][0]
+        assert "Will update only version, enable_ros and isaacsim_ros_ws." in result.output
+        assert "Your other settings and comments are kept." in result.output
+
+    def test_updated_lists_the_settings_that_moved(self):
+        self.mock_create_pow_toml.return_value = {
+            "status": "Updated",
+            "path": "pow.toml",
+            "changed": {
+                "version": ("5.1.0", "6.0.1"),
+                "enable_ros": (False, True),
+                "isaacsim_ros_ws": (None, "~/ws"),
+            },
+        }
+
+        result = self._run()
+
+        assert result.exit_code == 0
+        assert "Updated pow.toml" in result.output
+        assert "version: 5.1.0 → 6.0.1" in result.output
+        # Booleans read the way pow.toml spells them, not the way Python does.
+        assert "enable_ros: false → true" in result.output
+        assert "isaacsim_ros_ws: unset → ~/ws" in result.output
+
+    def test_unchanged_file_reads_as_a_no_op(self):
+        self.mock_create_pow_toml.return_value = {
+            "status": "Updated", "path": "pow.toml", "changed": {},
+        }
+
+        result = self._run()
+
+        assert result.exit_code == 0
+        assert "pow.toml already up to date" in result.output
+        assert "Updated pow.toml" not in result.output
+
+    def test_parse_error_marks_the_step_failed(self):
+        self.mock_create_pow_toml.return_value = {
+            "status": "Error",
+            "path": "pow.toml",
+            "message": "Unexpected character: 'x' at line 7 col 3",
+        }
+
+        result = self._run()
+
+        assert result.exit_code == 1
+        assert "[10/10] ❌ Finalizing:" in result.output
+        assert "pow.toml could not be parsed" in result.output
+        assert "at line 7 col 3" in result.output
+        assert "Project initialized successfully" not in result.output
+
+    def test_success_keeps_the_check_mark(self):
+        self.mock_create_pow_toml.return_value = {
+            "status": "Updated", "path": "pow.toml", "changed": {},
+        }
+
+        result = self._run()
+
+        assert "[10/10] ✅ Finalizing:" in result.output
+        assert "Project initialized successfully" in result.output

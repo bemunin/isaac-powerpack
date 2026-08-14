@@ -224,13 +224,24 @@ class PowConfig:
         return None
 
     def _load_config(self, project_root: Path) -> None:
-        """Load pow.toml configuration into memory."""
+        """Load pow.toml configuration into memory.
+
+        A pow.toml that is not valid TOML is reported as a plain error rather
+        than a tomllib traceback: every command goes through here, and the file
+        is the user's to fix - pow never rewrites it to make it parse.
+        """
         config_path = project_root / "pow.toml"
         if not config_path.exists():
             return
 
         with open(config_path, "rb") as f:
-            self._data = tomllib.load(f)
+            try:
+                self._data = tomllib.load(f)
+            except tomllib.TOMLDecodeError as e:
+                raise click.ClickException(
+                    f"{config_path} is not valid TOML: {e}\n"
+                    "Fix it, or delete it and re-run `pow init`."
+                ) from e
 
     # ── Global / home path properties ────────────────────────────────────────
 

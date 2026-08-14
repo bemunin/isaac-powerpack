@@ -513,3 +513,12 @@ def test_configured_default_version_ignores_malformed_toml(tmp_path):
     (tmp_path / "system.toml").write_text("not = valid = toml\n")
 
     assert PowConfig.configured_default_version(tmp_path) == ""
+
+
+def test_invalid_pow_toml_reports_a_plain_error(tmp_path, monkeypatch, reset_config_singleton):
+    """A syntax error in pow.toml must read as an error, not a tomllib traceback."""
+    (tmp_path / "pow.toml").write_text('[sim]\nversion = "6.0.1"\nbad = [\n')
+    monkeypatch.chdir(tmp_path)
+
+    with pytest.raises(click.ClickException, match="is not valid TOML"):
+        PowConfig()

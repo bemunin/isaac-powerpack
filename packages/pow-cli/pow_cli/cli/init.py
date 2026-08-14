@@ -88,11 +88,14 @@ def _step2_check_existing_config(initializer: Initializer) -> bool:
         "[yellow]Found existing pow.toml[/yellow]"
     )
     override = Confirm.ask(
-        "   Do you want to override existing pow.toml?",
+        "   Update settings in existing pow.toml?",
         default=False,
     )
     if override:
-        console.print("   [green]Proceeding and will override pow.toml.[/green]")
+        console.print(
+            "   [green]Will update only version, enable_ros and isaacsim_ros_ws.[/green]"
+        )
+        console.print("   [dim]Your other settings and comments are kept.[/dim]")
     else:
         console.print("   [yellow]Proceeding with existing pow.toml.[/yellow]")
         initializer.read_config()
@@ -493,20 +496,37 @@ def _step9_vscode_setup(initializer: Initializer):
         console.print(f"   [bold red]❌ Error:[/bold red] {result['message']}")
 
 
+def _toml_value(value) -> str:
+    """Render a setting the way pow.toml spells it, so diffs read like the file."""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return str(value)
+
+
 def _step10_finalize(
     initializer: Initializer,
     override_pow_toml: bool,
     ros_enabled: bool,
     isaacsim_ros_ws: str = "~/IsaacSim-ros_workspaces",
     sim_version: str | None = None,
-):
-    """Generate pow.toml configuration."""
-
-    
-    console.print("[bold blue][10/10] ✅ Finalizing:[/bold blue] Generating configuration...")
-    
-    # Ensure user-home alias in Omniverse config
+) -> bool:
+    """Generate pow.toml configuration. Returns False when it could not be written."""
+    # Both calls return their outcome instead of printing, so the step header can
+    # be rendered afterwards and carry the right icon.
     alias_result = initializer.setup_omniverse_user_home_alias()
+    result = initializer.create_pow_toml(
+        override=override_pow_toml,
+        enable_ros=ros_enabled,
+        isaacsim_ros_ws=isaacsim_ros_ws,
+        sim_version=sim_version,
+    )
+    failed = result["status"] == "Error"
+
+    icon = "❌" if failed else "✅"
+    console.print(
+        f"[bold blue][10/10] {icon} Finalizing:[/bold blue] Generating configuration..."
+    )
+
     if alias_result["status"] == "created":
         console.print(f"   [green]✔[/green] Added user-home alias in [dim]{alias_result['path']}[/dim]")
     elif alias_result["status"] == "updated":
@@ -514,19 +534,33 @@ def _step10_finalize(
     else:
         console.print(f"   [yellow]✔[/yellow] user-home alias already set in [dim]{alias_result['path']}[/dim]")
 
-    # Create pow.toml
-    result = initializer.create_pow_toml(
-        override=override_pow_toml,
-        enable_ros=ros_enabled,
-        isaacsim_ros_ws=isaacsim_ros_ws,
-        sim_version=sim_version,
-    )
     if result["status"] == "Created":
         console.print("   [green]✔[/green] Created pow.toml (from template)")
+    elif result["status"] == "Updated":
+        changed = result.get("changed") or {}
+        if not changed:
+            console.print("   [yellow]✔[/yellow] pow.toml already up to date")
+        else:
+            console.print(
+                "   [green]✔[/green] Updated pow.toml "
+                "[dim](kept your other settings)[/dim]"
+            )
+            for key, (old, new) in changed.items():
+                old_text = "[dim]unset[/dim]" if old is None else _toml_value(old)
+                console.print(
+                    f"       [dim]{key}:[/dim] {old_text} → [bold]{_toml_value(new)}[/bold]",
+                    highlight=False,
+                )
     elif result["status"] == "Existed":
         console.print("   [yellow]✔[/yellow] Kept existing pow.toml")
+    elif failed:
+        console.print("   [bold red]❌ Error:[/bold red] pow.toml could not be parsed")
+        console.print(f"      [dim]{result['message']}[/dim]")
+        console.print("      Fix it, or delete it and re-run [bold]pow init[/bold].")
     else:
         console.print("   [yellow]⚠[/yellow] pow.toml template not found. [dim]Skipped.[/dim]")
+
+    return not failed
 
 
 # ── Command entry point ───────────────────────────────────────────────────────
@@ -595,10 +629,19 @@ def init_cmd(sim_version: str | None):
     _step8_project_link(initializer, sim_version=resolved_version)
     _step9_vscode_setup(initializer)
 
-    _step10_finalize(
+    finalized = _step10_finalize(
         initializer, override_pow_toml, ros_enabled, isaacsim_ros_ws,
         sim_version=resolved_version,
     )
+
+    if not finalized:
+        console.print(
+            Panel(
+                "[bold red]✘ Initialization incomplete: pow.toml was not updated.[/bold red]",
+                border_style="red",
+            )
+        )
+        raise SystemExit(1)
 
     console.print(
         Panel(

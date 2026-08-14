@@ -9,7 +9,7 @@ Initialize an Isaac Sim project. All projects are isolated from each other. Only
 This interactive command walks through a 10-step setup:
 
 1. Validates the project directory (requires `pyproject.toml`)
-2. Checks for existing `pow.toml` configuration
+2. Checks for existing `pow.toml` configuration, offering to update it in place
 3. Creates the `.pow` global folder if it's not exists
 4. Selects the Isaac Sim version, then downloads and installs it in `.pow/isaacsim/<version>`
 5. Applies post-install optimizations
@@ -59,6 +59,25 @@ The chosen version drives the download, the matching `IsaacSim-<version>` ROS
 workspace tag cloned at step 6, the `_isaacsim` symlink at step 8, and the
 `version` key written to `pow.toml` at step 10. Re-running `pow init` with a
 different version re-points `_isaacsim` at the new installation.
+
+### Re-running `pow init` on an existing project
+
+Step 2 asks whether to update the settings in an existing `pow.toml`. Either
+answer keeps the file:
+
+- **No** — the file is not touched at all, and its `version`, `enable_ros` and
+  `isaacsim_ros_ws` are reused for the rest of the run.
+- **Yes** — `pow init` re-asks for those three settings and writes **only** those
+  three keys back. Everything else in the file survives: custom `exts`,
+  `raw_args`, `ros_bridge`, every `[[profiles]]` block, key order and comments.
+  Step 10 lists what changed, e.g. `version: 5.1.0 → 6.0.1`.
+
+Keys the current template has but your file lacks are not added — pow defaults
+every missing setting, so an older `pow.toml` keeps working as it is.
+
+A `pow.toml` that is not valid TOML is never rewritten. `pow init` (like every
+other command) stops with `pow.toml is not valid TOML: ...` and leaves the file
+for you to fix.
 
 ---
 
