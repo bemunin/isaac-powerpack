@@ -144,7 +144,7 @@ def fix_cmd(path, short):
         if not issues:
             continue
 
-        fix_file(usda_file, issues)
+        fix_file(usda_file, issues, alias_config)
         files_fixed += 1
         total_fixed += len(issues)
 
@@ -190,15 +190,9 @@ def _print_issue(issue, *, short: bool = False) -> None:
     """Print a single lint issue."""
     rel_path = _short_path(issue.file)
     if short:
-        if "simready_content" in issue.original:
-            problem = "relative path → use sim-ready staging S3 URL"
-        elif "Pow" in issue.original:
-            problem = "relative path → use pow-assets alias"
-        else:
-            problem = "relative path → use NVIDIA production S3 URL"
         console.print(
             f"  [dim]{rel_path}[/dim]:[green]{issue.line}[/green]"
-            f"  [red]●[/red] {problem}",
+            f"  [red]●[/red] {escape(issue.label)}",
             soft_wrap=True,
         )
     else:
@@ -223,7 +217,7 @@ def _print_fix(issue, *, short: bool = False) -> None:
     if short:
         console.print(
             f"  [dim]{rel_path}[/dim]:[green]{issue.line}[/green]"
-            f"  [green]✔[/green] fixed relative path",
+            f"  [green]✔[/green] fixed: {escape(issue.label)}",
             soft_wrap=True,
         )
     else:

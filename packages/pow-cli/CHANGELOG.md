@@ -6,6 +6,16 @@ All notable changes to the `pow-cli` package will be documented in this file.
 
 ### Added
 
+- **`pow lint` rule 4 — Isaac asset version mismatch.** Asset references pointing
+  at an `Assets/Isaac/<major>.<minor>` tree other than the one `[sim] version`
+  reads from are reported, and rewritten by `pow lint fix` (`version = "6.0.1"`
+  → `Assets/Isaac/6.0`). NVIDIA keeps every release's asset tree online, so a
+  stage authored against 5.1 kept loading 5.1 assets after the project moved to
+  6.0.1 with nothing to show for it. The target version is derived from the
+  configured version rather than tabulated, applies to every reference form (S3
+  URLs, `pow-assets`/`user-home` aliases, relative paths), and is skipped when
+  `pow.toml` sets no version
+
 - **Isaac Sim 6.0.1 support.** `pow init` step 4 now offers the installable
   versions as an arrow-key picker — latest first, marking the latest release and
   any already installed — or takes the version from the new `--sim-version`

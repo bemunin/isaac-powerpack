@@ -330,6 +330,10 @@ pow asset add local-assets -k /path/to/keep
 
 Check `.usda` files for asset path compatibility issues. Defaults to `dry-run` when no subcommand is given.
 
+Rule 4 keeps `Assets/Isaac/<version>` references in step with `[sim] version` in
+`pow.toml`, so a project moved to a new Isaac Sim release stops silently loading the
+previous release's assets.
+
 ### `pow lint [dry-run] [PATH]`
 
 Report lint issues without modifying files.
