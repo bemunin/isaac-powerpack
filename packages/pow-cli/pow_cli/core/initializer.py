@@ -288,20 +288,56 @@ class Initializer:
         target_link.symlink_to(global_isaacsim, target_is_directory=True)
         return {"status": "Created", "path": str(target_link)}
 
-    def setup_vscode_configs(self) -> dict:
-        """Set up the project's .vscode configs from the linked Isaac Sim.
+    def setup_vscode_configs(
+        self, version: str | None = None, version_changed: bool = True
+    ) -> dict:
+        """Set up the project's .vscode configs from a specific Isaac Sim install.
 
         ``launch.json``, ``tasks.json`` and ``c_cpp_properties.json`` are copied
         over, with ``${workspaceFolder}`` re-pointed at ``_isaacsim``.
         ``settings.json`` is **merged** instead - see
         :mod:`pow_cli.core.vscode_settings` - so the settings a user added to it
         survive a re-run of init.
+
+        Args:
+            version: the Isaac Sim version to configure for.  Defaults to the
+                version in pow.toml.  The configs are read from that install
+                rather than from wherever ``_isaacsim`` happens to point, so the
+                extension paths always belong to the version init selected.
+            version_changed: whether init just moved the project to a different
+                Isaac Sim version.  Only then is ``python.analysis.extraPaths``
+                rewritten; otherwise the project keeps the list it has.
         """
-        src_vscode = Path("_isaacsim") / ".vscode"
+        version = version or self._configured_version()
+        isaacsim_path = self.get_isaacsim_path(version)
+        if isaacsim_path is None:
+            return {"status": "Error", "message": f"Isaac Sim {version} not found."}
+
+        # The paths written into settings.json are relative to _isaacsim, so they
+        # are only correct while that symlink resolves to the install they came
+        # from.  Writing them against a stale link is the wrong-version bug.
+        link = Path("_isaacsim")
+        try:
+            linked_at = link.resolve(strict=True)
+        except OSError:
+            return {"status": "Error", "message": "_isaacsim not found."}
+        if linked_at != isaacsim_path.resolve():
+            return {
+                "status": "Error",
+                "message": (
+                    f"'_isaacsim' points at {linked_at}, not at Isaac Sim {version} "
+                    f"({isaacsim_path}).  Re-run `pow init` to re-link it."
+                ),
+            }
+
+        src_vscode = isaacsim_path / ".vscode"
         dest_vscode = Path(".vscode")
 
         if not src_vscode.is_dir():
-            return {"status": "Error", "message": "_isaacsim/.vscode not found."}
+            return {
+                "status": "Error",
+                "message": f"{src_vscode} not found.",
+            }
 
         dest_vscode.mkdir(parents=True, exist_ok=True)
         files_to_copy = ["launch.json", "tasks.json", "c_cpp_properties.json"]
@@ -328,11 +364,13 @@ class Initializer:
             results.append({"file": filename, "status": "Copied and patched"})
 
         settings_result = vscode_settings.apply(
-            dest_vscode / "settings.json", src_vscode / "settings.json"
+            dest_vscode / "settings.json",
+            src_vscode / "settings.json",
+            replace_extra_paths=version_changed,
         )
         results.append({"file": "settings.json", **settings_result})
 
-        return {"status": "Success", "results": results}
+        return {"status": "Success", "results": results, "version": version}
 
     def init_git(self) -> dict:
         """Initialize git repository if it doesn't already exist."""

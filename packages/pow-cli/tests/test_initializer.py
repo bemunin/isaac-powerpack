@@ -1,7 +1,10 @@
+import json
+
 import pytest
 import tomlkit
 from pathlib import Path
 from unittest.mock import MagicMock
+from pow_cli.common import jsonc
 from pow_cli.core.initializer import Initializer
 
 
@@ -338,34 +341,59 @@ cpu_performance_mode = true
 
 
 class TestSetupVscodeConfigs:
-    """The step copies the Isaac Sim configs but merges settings.json."""
+    """The configs must come from the Isaac Sim version init selected."""
 
     @pytest.fixture(autouse=True)
-    def _project(self, tmp_path, monkeypatch):
-        src = tmp_path / "isaacsim" / ".vscode"
-        src.mkdir(parents=True)
-        (src / "launch.json").write_text('{"configurations": [{"cwd": "${workspaceFolder}"}]}')
-        (src / "tasks.json").write_text('{"tasks": []}')
-        (src / "settings.json").write_text(
-            '{"python.analysis.extraPaths": ["exts/isaacsim.core.api"]}'
+    def _project(self, tmp_path, mocker, monkeypatch):
+        cfg = MagicMock()
+        cfg.global_dir_name = ".pow"
+        cfg.global_path = tmp_path / ".pow"
+        cfg.get.side_effect = lambda key, default=None, **kw: (
+            "6.0.1" if key == "version" else default
         )
+        mocker.patch.object(Initializer, "config", new_callable=lambda: property(lambda self: cfg))
 
-        project = tmp_path / "project"
-        project.mkdir()
-        (project / "_isaacsim").symlink_to(src.parent, target_is_directory=True)
-        monkeypatch.chdir(project)
-        self.settings = project / ".vscode" / "settings.json"
+        # Two installs whose extension lists differ the way the real ones do.
+        self.installs = {}
+        for version, ext in (("5.1.0", "python3.11"), ("6.0.1", "python3.12")):
+            vscode = cfg.global_path / "isaacsim" / version / ".vscode"
+            vscode.mkdir(parents=True)
+            (vscode / "launch.json").write_text(
+                '{"configurations": [{"cwd": "${workspaceFolder}"}]}'
+            )
+            (vscode / "tasks.json").write_text('{"tasks": []}')
+            (vscode / "settings.json").write_text(
+                '{"python.analysis.extraPaths": ["kit/python/lib/%s"]}' % ext
+            )
+            self.installs[version] = vscode.parent
+
+        self.project = tmp_path / "project"
+        self.project.mkdir()
+        monkeypatch.chdir(self.project)
+        self.settings = self.project / ".vscode" / "settings.json"
+
+    def _link(self, version):
+        link = self.project / "_isaacsim"
+        if link.is_symlink():
+            link.unlink()
+        link.symlink_to(self.installs[version], target_is_directory=True)
 
     @staticmethod
     def _statuses(result):
         return {res["file"]: res["status"] for res in result["results"]}
 
-    def test_errors_without_a_linked_isaacsim(self, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
-        assert Initializer().setup_vscode_configs()["status"] == "Error"
+    def _extra_paths(self):
+        return json.loads(jsonc.strip_jsonc(self.settings.read_text()))[
+            "python.analysis.extraPaths"
+        ]
+
+    def test_errors_without_a_linked_isaacsim(self):
+        assert Initializer().setup_vscode_configs(version="6.0.1")["status"] == "Error"
 
     def test_copies_the_other_configs_and_creates_settings(self):
-        result = Initializer().setup_vscode_configs()
+        self._link("6.0.1")
+
+        result = Initializer().setup_vscode_configs(version="6.0.1")
 
         assert self._statuses(result) == {
             "launch.json": "Copied and patched",
@@ -374,15 +402,65 @@ class TestSetupVscodeConfigs:
             "settings.json": "Created",
         }
         assert "${workspaceFolder}" not in Path(".vscode/launch.json").read_text()
-        assert '"_isaacsim/exts/isaacsim.core.api"' in self.settings.read_text()
+        assert self._extra_paths() == ["_isaacsim/kit/python/lib/python3.12"]
+
+    def test_paths_come_from_the_requested_version(self):
+        self._link("5.1.0")
+        Initializer().setup_vscode_configs(version="5.1.0")
+        assert self._extra_paths() == ["_isaacsim/kit/python/lib/python3.11"]
+
+        # Switching version rewrites the list to match the new install.
+        self._link("6.0.1")
+        result = Initializer().setup_vscode_configs(version="6.0.1")
+
+        assert self._statuses(result)["settings.json"] == "Updated"
+        assert self._extra_paths() == ["_isaacsim/kit/python/lib/python3.12"]
+
+    def test_refuses_to_write_against_a_stale_symlink(self):
+        """The paths are _isaacsim-relative, so a mismatched link means wrong paths."""
+        self._link("5.1.0")
+        Initializer().setup_vscode_configs(version="5.1.0")
+        before = self.settings.read_text()
+
+        result = Initializer().setup_vscode_configs(version="6.0.1")
+
+        assert result["status"] == "Error"
+        assert "6.0.1" in result["message"]
+        assert self.settings.read_text() == before
+
+    def test_the_list_is_kept_when_the_version_did_not_change(self):
+        self._link("6.0.1")
+        Initializer().setup_vscode_configs(version="6.0.1")
+        self.settings.write_text(
+            self.settings.read_text().replace(
+                '"_isaacsim/kit/python/lib/python3.12"',
+                '"_isaacsim/kit/python/lib/python3.12", "my/own/stubs"',
+            )
+        )
+
+        result = Initializer().setup_vscode_configs(version="6.0.1", version_changed=False)
+
+        assert self._statuses(result)["settings.json"] == "Already up to date"
+        assert self._extra_paths() == ["_isaacsim/kit/python/lib/python3.12", "my/own/stubs"]
+
+    def test_the_list_is_written_when_the_project_has_none(self):
+        """Seed-only, not never: a project without the key still gets one."""
+        self._link("6.0.1")
+        (self.project / ".vscode").mkdir()
+        self.settings.write_text('{\n    "files.autoSave": "afterDelay"\n}\n')
+
+        Initializer().setup_vscode_configs(version="6.0.1", version_changed=False)
+
+        assert self._extra_paths() == ["_isaacsim/kit/python/lib/python3.12"]
 
     def test_a_users_settings_survive_a_re_run(self):
-        Initializer().setup_vscode_configs()
+        self._link("6.0.1")
+        Initializer().setup_vscode_configs(version="6.0.1")
         self.settings.write_text(
             self.settings.read_text().replace("{", '{\n    "files.autoSave": "afterDelay",', 1)
         )
 
-        result = Initializer().setup_vscode_configs()
+        result = Initializer().setup_vscode_configs(version="6.0.1", version_changed=False)
 
         assert self._statuses(result)["settings.json"] == "Already up to date"
         assert '"files.autoSave": "afterDelay"' in self.settings.read_text()

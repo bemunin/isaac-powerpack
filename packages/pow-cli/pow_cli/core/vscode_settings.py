@@ -6,9 +6,13 @@ below are treated as *pow-managed*: they are written on every init, and every
 other key in the file - along with its comments and formatting - is left alone.
 
 ``python.analysis.extraPaths`` is not listed here because it is version
-specific.  It is read from the ``settings.json`` of the Isaac Sim install the
-project is linked to and re-pointed at ``_isaacsim/``, so a 5.1.0 and a 6.0.1
-project each get the extension list that actually exists on disk.
+specific.  It is read from the ``settings.json`` of the Isaac Sim install init
+selected and re-pointed at ``_isaacsim/``, so a 5.1.0 and a 6.0.1 project each
+get that version's extension list - the two differ by 30 extensions and by the
+``kit/python/lib/python3.X`` entries, so a list from the wrong version leaves
+every Isaac import unresolved.  It is rewritten only when init changes the
+project's Isaac Sim version (see ``replace_extra_paths`` in :func:`apply`);
+otherwise the project keeps the list it has.
 """
 
 import copy
@@ -218,15 +222,15 @@ def _union(old, new):
     return new          # the project changed the type under us: pow's value wins
 
 
-def _resolve(text: str, settings: dict) -> dict:
+def _resolve(text: str, settings: dict, seeded: frozenset) -> dict:
     """Turn the managed block into the values to write into *text*.
 
     :data:`MERGED_KEYS` are unioned with what the project already has, and
-    :data:`SEEDED_KEYS` are dropped when the project already sets them.  Only
-    those keys are read back, so an unparseable value elsewhere in the file
-    cannot block init.
+    *seeded* keys are dropped when the project already sets them.  Only those
+    keys are read back, so an unparseable value elsewhere in the file cannot
+    block init.
     """
-    wanted = (MERGED_KEYS | SEEDED_KEYS) & settings.keys()
+    wanted = (MERGED_KEYS | seeded) & settings.keys()
     existing = {}
     for entry in jsonc.scan_top_level(text)[0]:
         if entry.key in wanted and entry.key not in existing:
@@ -236,7 +240,7 @@ def _resolve(text: str, settings: dict) -> dict:
     for key, value in settings.items():
         if key not in existing:
             resolved[key] = value
-        elif key in SEEDED_KEYS:
+        elif key in seeded:
             continue        # the project has spoken; leave it alone
         elif key in MERGED_KEYS:
             resolved[key] = _union(existing[key], value)
@@ -245,13 +249,17 @@ def _resolve(text: str, settings: dict) -> dict:
     return resolved
 
 
-def apply(dest: Path, src_settings: Path) -> dict:
+def apply(dest: Path, src_settings: Path, replace_extra_paths: bool = True) -> dict:
     """Create or merge the project's ``.vscode/settings.json``.
 
     Args:
         dest: the project's ``.vscode/settings.json``.
-        src_settings: ``settings.json`` of the linked Isaac Sim install, read
-            only for :data:`EXTRA_PATHS_KEY`.
+        src_settings: ``settings.json`` of the Isaac Sim install init selected,
+            read only for :data:`EXTRA_PATHS_KEY`.
+        replace_extra_paths: rewrite :data:`EXTRA_PATHS_KEY` with that install's
+            list.  Init passes ``False`` when it did not change the project's
+            Isaac Sim version, which makes the key seed-only: written when the
+            project has none, otherwise left exactly as the project has it.
 
     Returns:
         dict with ``status`` (``Created``, ``Updated``, ``Already up to date``
@@ -261,6 +269,7 @@ def apply(dest: Path, src_settings: Path) -> dict:
     """
     paths = extra_paths(src_settings)
     settings = managed_settings(paths)
+    seeded = SEEDED_KEYS if replace_extra_paths else SEEDED_KEYS | {EXTRA_PATHS_KEY}
     warning = None if paths is not None else (
         f"could not read {EXTRA_PATHS_KEY} from {src_settings}"
     )
@@ -272,7 +281,9 @@ def apply(dest: Path, src_settings: Path) -> dict:
 
     try:
         text = dest.read_text()
-        patched, changed = jsonc.patch(text, _resolve(text, settings), remove=DEPRECATED_KEYS)
+        patched, changed = jsonc.patch(
+            text, _resolve(text, settings, seeded), remove=DEPRECATED_KEYS
+        )
     except (OSError, jsonc.JsoncError) as e:
         return {"status": "Error", "changed": {}, "message": str(e), "warning": warning}
 

@@ -151,8 +151,10 @@ class TestInitCmdSimVersion:
                      return_value=False)
         mocker.patch("pow_cli.core.initializer.Initializer.setup_project_structure",
                      return_value={"results": []})
-        mocker.patch("pow_cli.core.initializer.Initializer.setup_vscode_configs",
-                     return_value={"status": "Success", "results": []})
+        self.mock_vscode = mocker.patch(
+            "pow_cli.core.initializer.Initializer.setup_vscode_configs",
+            return_value={"status": "Success", "results": [], "version": "6.0.1"},
+        )
         mocker.patch("pow_cli.core.initializer.Initializer.setup_omniverse_user_home_alias",
                      return_value={"status": "unchanged", "path": "omniverse.toml"})
         self.mock_link = mocker.patch(
@@ -185,6 +187,54 @@ class TestInitCmdSimVersion:
         assert self.mock_download.call_args.kwargs["version"] == "5.1.0"
         assert self.mock_link.call_args.kwargs["version"] == "5.1.0"
         assert self.mock_create_pow_toml.call_args.kwargs["sim_version"] == "5.1.0"
+
+    def test_vscode_configs_are_built_for_the_resolved_version(self, mocker):
+        """Step 9 must configure the version init selected, not whatever _isaacsim is."""
+        self._no_pow_toml(mocker)
+
+        self.runner.invoke(
+            init_cmd, ["--sim-version", "5.1.0"], env={"NO_COLOR": "1", "TERM": "dumb"}
+        )
+
+        assert self.mock_vscode.call_args.kwargs["version"] == "5.1.0"
+
+    def test_an_unchanged_link_keeps_the_extension_paths(self, mocker):
+        self._no_pow_toml(mocker)
+        self.mock_link.return_value = {"status": "Existed", "path": "_isaacsim"}
+
+        self.runner.invoke(
+            init_cmd, ["--sim-version", "5.1.0"], env={"NO_COLOR": "1", "TERM": "dumb"}
+        )
+
+        assert self.mock_vscode.call_args.kwargs["version_changed"] is False
+
+    def test_a_repointed_link_rewrites_the_extension_paths(self, mocker):
+        self._no_pow_toml(mocker)
+        self.mock_link.return_value = {
+            "status": "Repointed", "path": "_isaacsim", "previous": "/old/6.0.1",
+        }
+
+        self.runner.invoke(
+            init_cmd, ["--sim-version", "5.1.0"], env={"NO_COLOR": "1", "TERM": "dumb"}
+        )
+
+        assert self.mock_vscode.call_args.kwargs["version_changed"] is True
+
+    def test_a_link_failure_stops_before_vscode_and_pow_toml(self, mocker):
+        """Configuring or recording a version that is not linked leaves a broken project."""
+        self._no_pow_toml(mocker)
+        self.mock_link.return_value = {
+            "status": "Error", "message": "'_isaacsim' exists and is not a symlink.",
+        }
+
+        result = self.runner.invoke(
+            init_cmd, ["--sim-version", "5.1.0"], env={"NO_COLOR": "1", "TERM": "dumb"}
+        )
+
+        assert result.exit_code == 1
+        assert "Initialization incomplete" in result.output
+        self.mock_vscode.assert_not_called()
+        self.mock_create_pow_toml.assert_not_called()
 
     def test_flag_rejects_unsupported_version(self, mocker):
         self._no_pow_toml(mocker)
@@ -268,8 +318,10 @@ class TestInitCmdFinalize:
                      return_value=False)
         mocker.patch("pow_cli.core.initializer.Initializer.setup_project_structure",
                      return_value={"results": []})
-        mocker.patch("pow_cli.core.initializer.Initializer.setup_vscode_configs",
-                     return_value={"status": "Success", "results": []})
+        self.mock_vscode = mocker.patch(
+            "pow_cli.core.initializer.Initializer.setup_vscode_configs",
+            return_value={"status": "Success", "results": [], "version": "6.0.1"},
+        )
         mocker.patch("pow_cli.core.initializer.Initializer.setup_omniverse_user_home_alias",
                      return_value={"status": "unchanged", "path": "omniverse.toml"})
         mocker.patch("pow_cli.core.initializer.Initializer.link_managed_isaacsim",

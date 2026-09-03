@@ -321,6 +321,43 @@ class TestApply:
         assert result["status"] == "Already up to date"
         assert dest.read_text() == before
 
+    def test_extra_paths_are_kept_when_the_version_did_not_change(self, dest, isaacsim_settings):
+        """`replace_extra_paths=False` makes the key seed-only."""
+        dest.parent.mkdir(parents=True)
+        dest.write_text('{\n    "python.analysis.extraPaths": ["_isaacsim/exts/mine"]\n}\n')
+
+        vscode_settings.apply(dest, isaacsim_settings, replace_extra_paths=False)
+
+        settings = json.loads(jsonc.strip_jsonc(dest.read_text()))
+        assert settings[vscode_settings.EXTRA_PATHS_KEY] == ["_isaacsim/exts/mine"]
+
+    def test_extra_paths_are_still_written_when_the_project_has_none(
+        self, dest, isaacsim_settings
+    ):
+        dest.parent.mkdir(parents=True)
+        dest.write_text('{\n    "files.autoSave": "afterDelay"\n}\n')
+
+        vscode_settings.apply(dest, isaacsim_settings, replace_extra_paths=False)
+
+        settings = json.loads(jsonc.strip_jsonc(dest.read_text()))
+        assert settings[vscode_settings.EXTRA_PATHS_KEY] == [
+            "_isaacsim/exts/isaacsim.core.api",
+            "_isaacsim/kit/python/lib/python3.12",
+        ]
+
+    def test_extra_paths_are_replaced_when_the_version_changed(self, dest, isaacsim_settings):
+        dest.parent.mkdir(parents=True)
+        dest.write_text('{\n    "python.analysis.extraPaths": ["_isaacsim/exts/old"]\n}\n')
+
+        result = vscode_settings.apply(dest, isaacsim_settings, replace_extra_paths=True)
+
+        assert result["status"] == "Updated"
+        settings = json.loads(jsonc.strip_jsonc(dest.read_text()))
+        assert settings[vscode_settings.EXTRA_PATHS_KEY] == [
+            "_isaacsim/exts/isaacsim.core.api",
+            "_isaacsim/kit/python/lib/python3.12",
+        ]
+
     def test_an_unparseable_file_is_reported_and_never_rewritten(self, dest, isaacsim_settings):
         dest.parent.mkdir(parents=True)
         broken = '{\n    "editor.rulers": [120\n'

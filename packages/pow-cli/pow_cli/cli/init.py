@@ -468,8 +468,12 @@ def _step7_project_structure(initializer: Initializer):
         console.print("   [yellow]✔[/yellow] .gitignore already exists. [dim]Kept existing.[/dim]")
 
 
-def _step8_project_link(initializer: Initializer, sim_version: str | None = None):
-    """Symlink managed Isaac Sim to local project."""
+def _step8_project_link(initializer: Initializer, sim_version: str | None = None) -> dict | None:
+    """Symlink managed Isaac Sim to local project.
+
+    Returns the link result, or None when it could not be linked - everything
+    after this step describes the linked install, so the caller must stop.
+    """
     console.print("[bold blue][8/10] 🔗 Project Link:[/bold blue] Linking Isaac Sim to project...")
     result = initializer.link_managed_isaacsim(version=sim_version)
     if result["status"] == "Created":
@@ -483,6 +487,8 @@ def _step8_project_link(initializer: Initializer, sim_version: str | None = None
         console.print(f"   [yellow]✔[/yellow] Symlink already exists: [dim]{result['path']}[/dim]")
     elif result["status"] == "Error":
         console.print(f"   [bold red]❌ Error:[/bold red] {result['message']}")
+        return None
+    return result
 
 
 #: VSCode config outcomes that are not a problem, mapped to how they are marked.
@@ -495,10 +501,18 @@ _VSCODE_OK_STATUSES = {
 }
 
 
-def _step9_vscode_setup(initializer: Initializer):
-    """Setup VSCode configuration for the project."""
+def _step9_vscode_setup(
+    initializer: Initializer,
+    version: str | None = None,
+    version_changed: bool = True,
+):
+    """Setup VSCode configuration for the project.
+
+    *version_changed* comes from step 8: the Isaac Sim extension paths are
+    rewritten only when the project moved to a different version.
+    """
     console.print("[bold blue][9/10] 💻 VSCode Config:[/bold blue] Setting up VSCode configs...")
-    result = initializer.setup_vscode_configs()
+    result = initializer.setup_vscode_configs(version=version, version_changed=version_changed)
 
     if result["status"] != "Success":
         console.print(f"   [bold red]❌ Error:[/bold red] {result['message']}")
@@ -520,6 +534,12 @@ def _step9_vscode_setup(initializer: Initializer):
             old_text = "[dim]unset[/dim]" if old is None else _json_value(old)
             new_text = "[dim]removed[/dim]" if new is None else f"[bold]{_json_value(new)}[/bold]"
             console.print(f"       [dim]{key}:[/dim] {old_text} → {new_text}", highlight=False)
+
+        if res["file"] == "settings.json" and not version_changed:
+            console.print(
+                f"       [dim]python.analysis.extraPaths: kept "
+                f"(Isaac Sim {result['version']} unchanged)[/dim]"
+            )
 
         if res.get("warning"):
             console.print(f"      [yellow]⚠[/yellow] [dim]{res['warning']}[/dim]")
@@ -662,8 +682,25 @@ def init_cmd(sim_version: str | None):
         sim_version=resolved_version,
     )
     _step7_project_structure(initializer)
-    _step8_project_link(initializer, sim_version=resolved_version)
-    _step9_vscode_setup(initializer)
+    linked = _step8_project_link(initializer, sim_version=resolved_version)
+    if linked is None:
+        # Everything below describes the linked install: the .vscode configs are
+        # read from it and pow.toml records its version.  Writing either against
+        # a link that is not there would leave the project inconsistent.
+        console.print(
+            Panel(
+                "[bold red]✘ Initialization incomplete: Isaac Sim could not be linked."
+                "[/bold red]",
+                border_style="red",
+            )
+        )
+        raise SystemExit(1)
+
+    _step9_vscode_setup(
+        initializer,
+        version=resolved_version,
+        version_changed=linked["status"] in ("Created", "Repointed"),
+    )
 
     finalized = _step10_finalize(
         initializer, override_pow_toml, ros_enabled, isaacsim_ros_ws,
