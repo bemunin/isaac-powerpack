@@ -2,7 +2,6 @@
 
 import json
 import os
-import re
 import platform
 import shutil
 import subprocess
@@ -13,6 +12,7 @@ from pathlib import Path
 import distro
 import tomlkit
 
+from . import vscode_settings
 from .models.pow_config import PowConfig
 from .models.system_config import SystemConfig
 
@@ -289,7 +289,14 @@ class Initializer:
         return {"status": "Created", "path": str(target_link)}
 
     def setup_vscode_configs(self) -> dict:
-        """Copy and patch VSCode configs from _isaacsim/.vscode to project."""
+        """Set up the project's .vscode configs from the linked Isaac Sim.
+
+        ``launch.json``, ``tasks.json`` and ``c_cpp_properties.json`` are copied
+        over, with ``${workspaceFolder}`` re-pointed at ``_isaacsim``.
+        ``settings.json`` is **merged** instead - see
+        :mod:`pow_cli.core.vscode_settings` - so the settings a user added to it
+        survive a re-run of init.
+        """
         src_vscode = Path("_isaacsim") / ".vscode"
         dest_vscode = Path(".vscode")
 
@@ -297,8 +304,8 @@ class Initializer:
             return {"status": "Error", "message": "_isaacsim/.vscode not found."}
 
         dest_vscode.mkdir(parents=True, exist_ok=True)
-        files_to_copy = ["launch.json", "tasks.json", "settings.json", "c_cpp_properties.json"]
-        patch_files = {"launch.json", "tasks.json", "settings.json"}
+        files_to_copy = ["launch.json", "tasks.json", "c_cpp_properties.json"]
+        patch_files = {"launch.json", "tasks.json"}
         results = []
 
         for filename in files_to_copy:
@@ -317,58 +324,13 @@ class Initializer:
 
             # Patch: replace ${workspaceFolder} with _isaacsim
             content = dest_file.read_text().replace("${workspaceFolder}", "_isaacsim")
-
-            # Patch settings.json using regex to handle JSONC (comments allowed)
-            if filename == "settings.json":
-                # Prefix non-prefixed string entries in python.analysis.extraPaths array
-                def _prefix_extra_paths(m):
-                    # m.group(0) is '"python.analysis.extraPaths": [ ... ]'
-                    full_content = m.group(0)
-                    key_part, array_part = full_content.split(':', 1)
-
-                    # Match strings inside the array that are not already prefixed
-                    patched_array = re.sub(
-                        r'([\[,])(\s*)"(?!_isaacsim)([^"]+)"',
-                        r'\1\2"_isaacsim/\3"',
-                        array_part
-                    )
-                    return key_part + ':' + patched_array
-
-                content = re.sub(
-                    r'"python\.analysis\.extraPaths"\s*:\s*\[[^\]]*\]',
-                    _prefix_extra_paths,
-                    content,
-                    flags=re.DOTALL,
-                )
-
-                # Remove duplicate keys: keep first occurrence, strip subsequent ones
-                # (including any trailing comma and optional line comment)
-                for dup_key in ("python.languageServer", "python.jediEnabled"):
-                    # Match the second (and beyond) occurrence of the key line
-                    pattern = (
-                        r'(?<=[}\n,])'           # preceded by a comma/newline (not start)
-                        r'(\s*"' + re.escape(dup_key) + r'"\s*:[^\n]+\n?)'
-                    )
-                    # Replace all but the first occurrence with nothing
-                    first_seen = [False]
-
-                    def _remove_dup(m, _seen=first_seen):
-                        if not _seen[0]:
-                            _seen[0] = True
-                            return m.group(0)   # keep first hit
-                        # Remove the line; also drop a preceding comma if it's trailing
-                        return ""
-
-                    content = re.sub(pattern, _remove_dup, content)
-
-                # Replace deprecated key with its modern equivalent
-                content = content.replace(
-                    '"typescript.tsc.autoDetect"',
-                    '"js/ts.tsc.autoDetect"',
-                )
-
             dest_file.write_text(content)
             results.append({"file": filename, "status": "Copied and patched"})
+
+        settings_result = vscode_settings.apply(
+            dest_vscode / "settings.json", src_vscode / "settings.json"
+        )
+        results.append({"file": "settings.json", **settings_result})
 
         return {"status": "Success", "results": results}
 

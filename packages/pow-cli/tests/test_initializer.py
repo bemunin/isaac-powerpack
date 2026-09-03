@@ -335,3 +335,54 @@ cpu_performance_mode = true
         assert result["status"] == "Error"
         assert result["message"]
         assert self.pow_toml.read_text() == broken
+
+
+class TestSetupVscodeConfigs:
+    """The step copies the Isaac Sim configs but merges settings.json."""
+
+    @pytest.fixture(autouse=True)
+    def _project(self, tmp_path, monkeypatch):
+        src = tmp_path / "isaacsim" / ".vscode"
+        src.mkdir(parents=True)
+        (src / "launch.json").write_text('{"configurations": [{"cwd": "${workspaceFolder}"}]}')
+        (src / "tasks.json").write_text('{"tasks": []}')
+        (src / "settings.json").write_text(
+            '{"python.analysis.extraPaths": ["exts/isaacsim.core.api"]}'
+        )
+
+        project = tmp_path / "project"
+        project.mkdir()
+        (project / "_isaacsim").symlink_to(src.parent, target_is_directory=True)
+        monkeypatch.chdir(project)
+        self.settings = project / ".vscode" / "settings.json"
+
+    @staticmethod
+    def _statuses(result):
+        return {res["file"]: res["status"] for res in result["results"]}
+
+    def test_errors_without_a_linked_isaacsim(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        assert Initializer().setup_vscode_configs()["status"] == "Error"
+
+    def test_copies_the_other_configs_and_creates_settings(self):
+        result = Initializer().setup_vscode_configs()
+
+        assert self._statuses(result) == {
+            "launch.json": "Copied and patched",
+            "tasks.json": "Copied and patched",
+            "c_cpp_properties.json": "Not found in source",   # absent in Isaac Sim 6.0.1
+            "settings.json": "Created",
+        }
+        assert "${workspaceFolder}" not in Path(".vscode/launch.json").read_text()
+        assert '"_isaacsim/exts/isaacsim.core.api"' in self.settings.read_text()
+
+    def test_a_users_settings_survive_a_re_run(self):
+        Initializer().setup_vscode_configs()
+        self.settings.write_text(
+            self.settings.read_text().replace("{", '{\n    "files.autoSave": "afterDelay",', 1)
+        )
+
+        result = Initializer().setup_vscode_configs()
+
+        assert self._statuses(result)["settings.json"] == "Already up to date"
+        assert '"files.autoSave": "afterDelay"' in self.settings.read_text()

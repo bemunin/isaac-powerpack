@@ -1,5 +1,6 @@
 """Init command implementation."""
 
+import json
 import time
 from pathlib import Path
 
@@ -484,16 +485,51 @@ def _step8_project_link(initializer: Initializer, sim_version: str | None = None
         console.print(f"   [bold red]❌ Error:[/bold red] {result['message']}")
 
 
+#: VSCode config outcomes that are not a problem, mapped to how they are marked.
+_VSCODE_OK_STATUSES = {
+    "Copied": "green",
+    "Copied and patched": "green",
+    "Created": "green",
+    "Updated": "green",
+    "Already up to date": "yellow",
+}
+
+
 def _step9_vscode_setup(initializer: Initializer):
     """Setup VSCode configuration for the project."""
     console.print("[bold blue][9/10] 💻 VSCode Config:[/bold blue] Setting up VSCode configs...")
     result = initializer.setup_vscode_configs()
-    if result["status"] == "Success":
-        for res in result["results"]:
-            status_symbol = "[green]✔[/green]" if "patched" in res["status"] or res["status"] == "Copied" else "[yellow]⚠[/yellow]"
-            console.print(f"   {status_symbol} {res['file']}: [dim]{res['status']}[/dim]")
-    else:
+
+    if result["status"] != "Success":
         console.print(f"   [bold red]❌ Error:[/bold red] {result['message']}")
+        return
+
+    for res in result["results"]:
+        status = res["status"]
+        colour = _VSCODE_OK_STATUSES.get(status)
+        if status == "Error":
+            console.print(f"   [bold red]❌[/bold red] {res['file']}: [dim]{res.get('message', '')}[/dim]")
+            console.print("      Fix it, or delete it and re-run [bold]pow init[/bold].")
+            continue
+
+        symbol = f"[{colour}]✔[/{colour}]" if colour else "[yellow]⚠[/yellow]"
+        note = " [dim](kept your other settings)[/dim]" if status == "Updated" else ""
+        console.print(f"   {symbol} {res['file']}: [dim]{status}[/dim]{note}")
+
+        for key, (old, new) in (res.get("changed") or {}).items():
+            old_text = "[dim]unset[/dim]" if old is None else _json_value(old)
+            new_text = "[dim]removed[/dim]" if new is None else f"[bold]{_json_value(new)}[/bold]"
+            console.print(f"       [dim]{key}:[/dim] {old_text} → {new_text}", highlight=False)
+
+        if res.get("warning"):
+            console.print(f"      [yellow]⚠[/yellow] [dim]{res['warning']}[/dim]")
+
+
+def _json_value(value) -> str:
+    """Render a settings value the way settings.json spells it, shortening containers."""
+    if isinstance(value, (list, dict)) and len(value) > 3:
+        return f"[dim]{len(value)} entries[/dim]"
+    return json.dumps(value)
 
 
 def _toml_value(value) -> str:
